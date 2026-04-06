@@ -818,21 +818,18 @@ def render_chat_history_sidebar():
     # Hiển thị danh sách câu hỏi (mới nhất lên đầu)
     st.caption(f"📋 {len(qa_pairs)} câu hỏi đã được hỏi")
 
-    history_html = '<div class="history-list">'
     for idx, pair in enumerate(reversed(qa_pairs)):
         q_display = pair["question"]
         a_preview = pair["answer"][:120] + "..." if len(pair["answer"]) > 120 else pair["answer"]
-        # Escape HTML
-        q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        history_html += f"""
-        <div class="history-item">
-            <div class="history-question">❓ {q_display}</div>
-            <div class="history-answer-preview">💡 {a_preview}</div>
-        </div>
-        """
-    history_html += '</div>'
-    st.markdown(history_html, unsafe_allow_html=True)
+        # Sanitize: loại bỏ newlines, escape HTML entities và quotes
+        q_display = q_display.replace("\n", " ").replace("\r", " ")
+        a_preview = a_preview.replace("\n", " ").replace("\r", " ")
+        q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        st.markdown(
+            f"""<div class="history-item"><div class="history-question">❓ {q_display}</div><div class="history-answer-preview">💡 {a_preview}</div></div>""",
+            unsafe_allow_html=True,
+        )
 
     # Expander để xem chi tiết từng câu hỏi
     with st.expander("🔎 Xem chi tiết câu hỏi đã hỏi", expanded=False):
