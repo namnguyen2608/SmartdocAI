@@ -567,9 +567,6 @@ def init_session_state():
         "is_processing": False,
         "auto_process_upload": True,
         "last_processed_upload_signature": "",
-        # Confirmation dialog states
-        "confirm_clear_history": False,
-        "confirm_clear_vectorstore": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -855,73 +852,71 @@ def render_chat_history_sidebar():
                 st.markdown("---")
 
 
+@st.dialog("⚠️ Xác nhận xóa lịch sử")
+def confirm_clear_history_dialog():
+    """Dialog xác nhận xóa lịch sử chat — hiển thị ở giữa màn hình."""
+    st.markdown(
+        """
+        <div class="confirm-dialog">
+            <div class="confirm-title">⚠️ Xác nhận xóa lịch sử</div>
+            <div class="confirm-message">
+                Bạn có chắc chắn muốn xóa <strong>toàn bộ lịch sử chat</strong>?
+                Hành động này không thể hoàn tác.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    confirm_col1, confirm_col2 = st.columns(2)
+    with confirm_col1:
+        if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
+            st.session_state.chat_history = []
+            st.rerun()
+    with confirm_col2:
+        if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
+            st.rerun()
+
+
+@st.dialog("⚠️ Xác nhận xóa tài liệu")
+def confirm_clear_vectorstore_dialog():
+    """Dialog xác nhận xóa vector store — hiển thị ở giữa màn hình."""
+    st.markdown(
+        """
+        <div class="confirm-dialog">
+            <div class="confirm-title">⚠️ Xác nhận xóa tài liệu</div>
+            <div class="confirm-message">
+                Bạn có chắc chắn muốn xóa <strong>toàn bộ tài liệu đã upload</strong>
+                và vector store? Hành động này không thể hoàn tác.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    confirm_col1, confirm_col2 = st.columns(2)
+    with confirm_col1:
+        if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
+            clear_vector_store()
+            st.session_state.vector_store = None
+            st.session_state.processed_files = []
+            st.session_state.total_chunks = 0
+            st.session_state.last_processed_upload_signature = ""
+            st.rerun()
+    with confirm_col2:
+        if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
+            st.rerun()
+
+
 def render_action_buttons():
-    """Render các nút thao tác với confirmation dialog."""
+    """Render các nút thao tác — dialog xác nhận hiển thị ở giữa màn hình."""
     action_col1, action_col2 = st.columns(2)
 
     with action_col1:
         if st.button("🗑️ Xóa lịch sử", use_container_width=True, key="clear_chat_btn"):
-            st.session_state.confirm_clear_history = True
-            st.session_state.confirm_clear_vectorstore = False
+            confirm_clear_history_dialog()
 
     with action_col2:
         if st.button("📦 Xóa tài liệu", use_container_width=True, key="clear_vs_btn"):
-            st.session_state.confirm_clear_vectorstore = True
-            st.session_state.confirm_clear_history = False
-
-    # ── Confirmation Dialog: Clear History ──
-    if st.session_state.confirm_clear_history:
-        st.markdown(
-            """
-            <div class="confirm-dialog">
-                <div class="confirm-title">⚠️ Xác nhận xóa lịch sử</div>
-                <div class="confirm-message">
-                    Bạn có chắc chắn muốn xóa <strong>toàn bộ lịch sử chat</strong>?
-                    Hành động này không thể hoàn tác.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        confirm_col1, confirm_col2 = st.columns(2)
-        with confirm_col1:
-            if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
-                st.session_state.chat_history = []
-                st.session_state.confirm_clear_history = False
-                st.rerun()
-        with confirm_col2:
-            if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
-                st.session_state.confirm_clear_history = False
-                st.rerun()
-
-    # ── Confirmation Dialog: Clear Vector Store ──
-    if st.session_state.confirm_clear_vectorstore:
-        st.markdown(
-            """
-            <div class="confirm-dialog">
-                <div class="confirm-title">⚠️ Xác nhận xóa tài liệu</div>
-                <div class="confirm-message">
-                    Bạn có chắc chắn muốn xóa <strong>toàn bộ tài liệu đã upload</strong>
-                    và vector store? Hành động này không thể hoàn tác.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        confirm_col1, confirm_col2 = st.columns(2)
-        with confirm_col1:
-            if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
-                clear_vector_store()
-                st.session_state.vector_store = None
-                st.session_state.processed_files = []
-                st.session_state.total_chunks = 0
-                st.session_state.last_processed_upload_signature = ""
-                st.session_state.confirm_clear_vectorstore = False
-                st.rerun()
-        with confirm_col2:
-            if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
-                st.session_state.confirm_clear_vectorstore = False
-                st.rerun()
+            confirm_clear_vectorstore_dialog()
 
 
 # ============================================================
@@ -1215,6 +1210,9 @@ def handle_user_input(user_input: str):
             "sources": result.get("sources", []),
         }
     )
+
+    # Rerun để cập nhật lịch sử hội thoại trong sidebar ngay lập tức
+    st.rerun()
 
 
 # ============================================================
