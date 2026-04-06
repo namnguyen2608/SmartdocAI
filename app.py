@@ -442,6 +442,98 @@ st.markdown(
         border-radius: var(--radius-md);
     }
 
+    /* ── Chat History Sidebar ── */
+    .history-list {
+        max-height: 280px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding-right: 2px;
+    }
+    .history-item {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        cursor: default;
+        transition: var(--transition);
+    }
+    .history-item:hover {
+        background: var(--bg-hover);
+        border-color: var(--border-default);
+    }
+    .history-question {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.4;
+    }
+    .history-answer-preview {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        margin-top: 4px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.35;
+    }
+    .history-time {
+        font-size: 0.62rem;
+        color: var(--text-muted);
+        margin-top: 4px;
+        opacity: 0.7;
+    }
+    .empty-history {
+        text-align: center;
+        padding: 16px;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        border: 1px dashed var(--border-default);
+        border-radius: var(--radius-md);
+    }
+
+    /* ── Confirmation Dialog ── */
+    .confirm-dialog {
+        background: var(--bg-elevated);
+        border: 1px solid var(--error-border);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        margin: 8px 0;
+        animation: slideIn 0.25s ease-out;
+    }
+    .confirm-dialog .confirm-title {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--error);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .confirm-dialog .confirm-message {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        line-height: 1.45;
+        margin-bottom: 10px;
+    }
+
+    /* ── Danger Button ── */
+    .danger-btn button {
+        background: var(--error-soft) !important;
+        border: 1px solid var(--error-border) !important;
+        color: var(--error) !important;
+    }
+    .danger-btn button:hover {
+        background: rgba(240, 110, 110, 0.25) !important;
+        border-color: var(--error) !important;
+    }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -470,6 +562,9 @@ def init_session_state():
         "is_processing": False,
         "auto_process_upload": True,
         "last_processed_upload_signature": "",
+        # Confirmation dialog states
+        "confirm_clear_history": False,
+        "confirm_clear_vectorstore": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -539,19 +634,15 @@ def render_sidebar():
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
+        # ── Lịch sử hội thoại ──
+        st.markdown('<div class="section-header">💬 Lịch sử hội thoại</div>', unsafe_allow_html=True)
+        render_chat_history_sidebar()
+
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+
         # ── Actions ──
         st.markdown('<div class="section-header">⚙️ Thao tác</div>', unsafe_allow_html=True)
-        action_col1, action_col2 = st.columns(2)
-        with action_col1:
-            if st.button("🗑️ Xóa chat", use_container_width=True, key="clear_chat_btn"):
-                st.session_state.chat_history = []
-                st.rerun()
-        with action_col2:
-            if st.button("🔄 Reset tất cả", use_container_width=True, key="reset_data_btn"):
-                clear_vector_store()
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.rerun()
+        render_action_buttons()
 
 
 def render_system_status():
@@ -693,6 +784,137 @@ def render_file_list():
             """,
             unsafe_allow_html=True,
         )
+
+
+def render_chat_history_sidebar():
+    """Render lịch sử hội thoại trong sidebar."""
+    history = st.session_state.chat_history
+
+    # Lọc ra các cặp câu hỏi - câu trả lời
+    qa_pairs = []
+    i = 0
+    while i < len(history):
+        if history[i]["role"] == "user":
+            question = history[i]["content"]
+            answer = ""
+            if i + 1 < len(history) and history[i + 1]["role"] == "assistant":
+                answer = history[i + 1]["content"]
+                i += 2
+            else:
+                i += 1
+            qa_pairs.append({"question": question, "answer": answer})
+        else:
+            i += 1
+
+    if not qa_pairs:
+        st.markdown(
+            """
+            <div class="empty-history">
+                💭 Chưa có cuộc hội thoại nào.<br>
+                Hãy đặt câu hỏi để bắt đầu.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    # Hiển thị danh sách câu hỏi (mới nhất lên đầu)
+    st.caption(f"📋 {len(qa_pairs)} câu hỏi đã được hỏi")
+
+    history_html = '<div class="history-list">'
+    for idx, pair in enumerate(reversed(qa_pairs)):
+        q_display = pair["question"]
+        a_preview = pair["answer"][:120] + "..." if len(pair["answer"]) > 120 else pair["answer"]
+        # Escape HTML
+        q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        history_html += f"""
+        <div class="history-item">
+            <div class="history-question">❓ {q_display}</div>
+            <div class="history-answer-preview">💡 {a_preview}</div>
+        </div>
+        """
+    history_html += '</div>'
+    st.markdown(history_html, unsafe_allow_html=True)
+
+    # Expander để xem chi tiết từng câu hỏi
+    with st.expander("🔎 Xem chi tiết câu hỏi đã hỏi", expanded=False):
+        for idx, pair in enumerate(reversed(qa_pairs)):
+            st.markdown(f"**❓ Câu hỏi {len(qa_pairs) - idx}:**")
+            st.markdown(f"> {pair['question']}")
+            st.markdown(f"**💡 Câu trả lời:**")
+            st.markdown(pair["answer"][:500] + ("..." if len(pair["answer"]) > 500 else ""))
+            if idx < len(qa_pairs) - 1:
+                st.markdown("---")
+
+
+def render_action_buttons():
+    """Render các nút thao tác với confirmation dialog."""
+    action_col1, action_col2 = st.columns(2)
+
+    with action_col1:
+        if st.button("🗑️ Xóa lịch sử", use_container_width=True, key="clear_chat_btn"):
+            st.session_state.confirm_clear_history = True
+            st.session_state.confirm_clear_vectorstore = False
+
+    with action_col2:
+        if st.button("📦 Xóa tài liệu", use_container_width=True, key="clear_vs_btn"):
+            st.session_state.confirm_clear_vectorstore = True
+            st.session_state.confirm_clear_history = False
+
+    # ── Confirmation Dialog: Clear History ──
+    if st.session_state.confirm_clear_history:
+        st.markdown(
+            """
+            <div class="confirm-dialog">
+                <div class="confirm-title">⚠️ Xác nhận xóa lịch sử</div>
+                <div class="confirm-message">
+                    Bạn có chắc chắn muốn xóa <strong>toàn bộ lịch sử chat</strong>?
+                    Hành động này không thể hoàn tác.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        confirm_col1, confirm_col2 = st.columns(2)
+        with confirm_col1:
+            if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
+                st.session_state.chat_history = []
+                st.session_state.confirm_clear_history = False
+                st.rerun()
+        with confirm_col2:
+            if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
+                st.session_state.confirm_clear_history = False
+                st.rerun()
+
+    # ── Confirmation Dialog: Clear Vector Store ──
+    if st.session_state.confirm_clear_vectorstore:
+        st.markdown(
+            """
+            <div class="confirm-dialog">
+                <div class="confirm-title">⚠️ Xác nhận xóa tài liệu</div>
+                <div class="confirm-message">
+                    Bạn có chắc chắn muốn xóa <strong>toàn bộ tài liệu đã upload</strong>
+                    và vector store? Hành động này không thể hoàn tác.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        confirm_col1, confirm_col2 = st.columns(2)
+        with confirm_col1:
+            if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
+                clear_vector_store()
+                st.session_state.vector_store = None
+                st.session_state.processed_files = []
+                st.session_state.total_chunks = 0
+                st.session_state.last_processed_upload_signature = ""
+                st.session_state.confirm_clear_vectorstore = False
+                st.rerun()
+        with confirm_col2:
+            if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
+                st.session_state.confirm_clear_vectorstore = False
+                st.rerun()
 
 
 # ============================================================
