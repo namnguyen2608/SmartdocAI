@@ -15,7 +15,12 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
-from modules.document_processor import extract_text_from_pdf, split_documents
+from modules.document_processor import (
+    extract_text_from_pdf,
+    extract_text_from_docx,
+    split_documents,
+    SUPPORTED_EXTENSIONS,
+)
 from modules.vector_store import (
     create_vector_store,
     save_vector_store,
@@ -592,15 +597,15 @@ def render_system_status():
 
 
 def render_upload_section():
-    """Render phần upload PDF trong sidebar."""
+    """Render phần upload PDF/DOCX trong sidebar."""
     uploaded_files = st.file_uploader(
-        "Chọn file PDF",
-        type=["pdf"],
+        "Chọn file PDF hoặc DOCX",
+        type=["pdf", "docx"],
         accept_multiple_files=True,
         key="file_uploader",
-        help="Kéo-thả hoặc nhấn để chọn nhiều file PDF cùng lúc.",
+        help="Kéo-thả hoặc nhấn để chọn nhiều file PDF / DOCX cùng lúc.",
     )
-    st.caption("📎 Hỗ trợ kéo-thả nhiều file PDF cùng lúc")
+    st.caption("📎 Hỗ trợ kéo-thả nhiều file PDF & DOCX cùng lúc")
 
     # Toggle auto-process
     st.toggle(
@@ -627,11 +632,12 @@ def render_upload_section():
                 size_str = f"{file_size / 1024:.0f} KB"
             else:
                 size_str = f"{file_size / (1024 * 1024):.1f} MB"
+            file_icon = "📝" if uf.name.lower().endswith(".docx") else "📄"
 
             st.markdown(
                 f"""
                 <div class="file-card">
-                    <div class="file-icon">📄</div>
+                    <div class="file-icon">{file_icon}</div>
                     <div class="file-info">
                         <div class="file-name">{uf.name}</div>
                         <div class="file-meta">{size_str}</div>
@@ -670,7 +676,7 @@ def render_file_list():
             """
             <div class="empty-files">
                 📭 Chưa có tài liệu nào được xử lý.<br>
-                Hãy tải file PDF lên ở phía trên.
+                Hãy tải file PDF hoặc DOCX lên ở phía trên.
             </div>
             """,
             unsafe_allow_html=True,
@@ -680,10 +686,11 @@ def render_file_list():
     for f in st.session_state.processed_files[::-1]:
         pages = f.get("pages", "?")
         chunks = f.get("chunks", "?")
+        file_icon = "📝" if f["name"].lower().endswith(".docx") else "📄"
         st.markdown(
             f"""
             <div class="file-card">
-                <div class="file-icon">📄</div>
+                <div class="file-icon">{file_icon}</div>
                 <div class="file-info">
                     <div class="file-name">{f['name']}</div>
                     <div class="file-meta">{pages} trang</div>
@@ -699,7 +706,7 @@ def render_file_list():
 # Document Processing
 # ============================================================
 def process_documents(uploaded_files, upload_signature: str = ""):
-    """Xử lý các file PDF đã upload với giao diện mượt mà."""
+    """Xử lý các file PDF / DOCX đã upload với giao diện mượt mà."""
     st.session_state.is_processing = True
 
     total = len(uploaded_files)
@@ -710,7 +717,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
     progress_bar = st.progress(0, text="Đang chuẩn bị xử lý...")
     status_container = st.empty()
 
-    # === Bước 1 & 2: Đọc PDF và Chunking ===
+    # === Bước 1 & 2: Đọc tài liệu và Chunking ===
     for idx, uploaded_file in enumerate(uploaded_files):
         file_name = uploaded_file.name
         base_progress = idx / total
@@ -725,14 +732,22 @@ def process_documents(uploaded_files, upload_signature: str = ""):
         )
         progress_bar.progress(base_progress + (0.3 / total), text=f"Đọc {file_name}...")
 
+        # Xác định phần mở rộng để giữ nguyên khi lưu file tạm
+        import os as _os
+        _, file_ext = _os.path.splitext(file_name)
+        file_ext = file_ext.lower() if file_ext else ".pdf"
+
         try:
-            # Lưu file tạm
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            # Lưu file tạm với đúng phần mở rộng
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
                 tmp.write(uploaded_file.getbuffer())
                 tmp_path = tmp.name
 
-            # Trích xuất
-            raw_docs = extract_text_from_pdf(tmp_path, source_name=file_name)
+            # Trích xuất (tự động phát hiện định dạng)
+            if file_ext == ".docx":
+                raw_docs = extract_text_from_docx(tmp_path, source_name=file_name)
+            else:
+                raw_docs = extract_text_from_pdf(tmp_path, source_name=file_name)
             num_pages = len(raw_docs)
 
             # Chunking
@@ -882,12 +897,12 @@ def render_welcome():
                 <h1>Chào mừng đến SmartDocAI</h1>
                 <p>
                     Trợ lý AI thông minh giúp bạn phân tích và hỏi đáp nội dung
-                    tài liệu PDF. Tải tài liệu lên và bắt đầu trò chuyện ngay!
+                    tài liệu PDF & DOCX. Tải tài liệu lên và bắt đầu trò chuyện ngay!
                 </p>
                 <div class="welcome-steps">
                     <div class="welcome-step">
                         <div class="step-num">1</div>
-                        Tải file PDF lên ở thanh bên trái
+                        Tải file PDF hoặc DOCX lên ở thanh bên trái
                     </div>
                     <div class="welcome-step">
                         <div class="step-num">2</div>
