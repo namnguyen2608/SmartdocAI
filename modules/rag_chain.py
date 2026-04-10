@@ -12,7 +12,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 
-from modules.vector_store import similarity_search
+from modules.vector_store import similarity_search, similarity_search_with_scores
 from modules.language_detector import detect_language, get_language_instruction
 import config
 
@@ -208,8 +208,9 @@ def ask_question(
             })
             result["answer"] = response.content
         else:
-            # Pipeline RAG đầy đủ (Cập nhật theo Listing 6 và Mục 7.2)
-            relevant_docs = similarity_search(vector_store, question)
+            # Pipeline RAG đầy đủ
+            doc_score_pairs = similarity_search_with_scores(vector_store, question)
+            relevant_docs = [doc for doc, _ in doc_score_pairs]
             context = format_context(relevant_docs)
 
             language_instruction = get_language_instruction(language)
@@ -224,15 +225,25 @@ def ask_question(
 
             result["answer"] = response.content
 
-            # Trích xuất nguồn tham khảo
+            # Trích xuất nguồn tham khảo đầy đủ (dùng cho citation UI)
+            seen_keys = set()
             sources = []
-            for doc in relevant_docs:
-                source_info = {
-                    "file": _clean_source_name(doc.metadata.get("source", "N/A")),
-                    "page": doc.metadata.get("page", "N/A"),
-                }
-                if source_info not in sources:
-                    sources.append(source_info)
+            for chunk_idx, (doc, score) in enumerate(doc_score_pairs):
+                file_name = _clean_source_name(doc.metadata.get("source", "N/A"))
+                page = doc.metadata.get("page", "N/A")
+                dedup_key = (file_name, page, doc.page_content[:80])
+                if dedup_key in seen_keys:
+                    continue
+                seen_keys.add(dedup_key)
+                sources.append({
+                    "file": file_name,
+                    "page": page,
+                    "total_pages": doc.metadata.get("total_pages"),
+                    "file_type": doc.metadata.get("file_type", "pdf"),
+                    "content": doc.page_content,
+                    "chunk_index": chunk_idx + 1,
+                    "score": round(float(score), 3),
+                })
             result["sources"] = sources
 
     except Exception as e:
@@ -242,8 +253,29 @@ def ask_question(
         
         # Nếu có vector_store, dùng fallback để trả về các đoạn text thô
         if vector_store is not None:
-            relevant_docs = similarity_search(vector_store, question)
+            doc_score_pairs = similarity_search_with_scores(vector_store, question)
+            relevant_docs = [doc for doc, _ in doc_score_pairs]
             result["answer"] = _build_fallback_answer(relevant_docs, result["language"])
             result["used_fallback"] = True
+            # Gắn sources cơ bản cho fallback
+            seen_keys = set()
+            sources = []
+            for chunk_idx, (doc, score) in enumerate(doc_score_pairs):
+                file_name = _clean_source_name(doc.metadata.get("source", "N/A"))
+                page = doc.metadata.get("page", "N/A")
+                dedup_key = (file_name, page, doc.page_content[:80])
+                if dedup_key in seen_keys:
+                    continue
+                seen_keys.add(dedup_key)
+                sources.append({
+                    "file": file_name,
+                    "page": page,
+                    "total_pages": doc.metadata.get("total_pages"),
+                    "file_type": doc.metadata.get("file_type", "pdf"),
+                    "content": doc.page_content,
+                    "chunk_index": chunk_idx + 1,
+                    "score": round(float(score), 3),
+                })
+            result["sources"] = sources
 
     return result
