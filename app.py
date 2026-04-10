@@ -15,7 +15,12 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
-from modules.document_processor import extract_text_from_pdf, split_documents
+from modules.document_processor import (
+    extract_text_from_pdf,
+    extract_text_from_docx,
+    split_documents,
+    SUPPORTED_EXTENSIONS,
+)
 from modules.vector_store import (
     create_vector_store,
     save_vector_store,
@@ -562,9 +567,6 @@ def init_session_state():
         "is_processing": False,
         "auto_process_upload": True,
         "last_processed_upload_signature": "",
-        # Confirmation dialog states
-        "confirm_clear_history": False,
-        "confirm_clear_vectorstore": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -683,15 +685,15 @@ def render_system_status():
 
 
 def render_upload_section():
-    """Render phần upload PDF trong sidebar."""
+    """Render phần upload PDF/DOCX trong sidebar."""
     uploaded_files = st.file_uploader(
-        "Chọn file PDF",
-        type=["pdf"],
+        "Chọn file PDF hoặc DOCX",
+        type=["pdf", "docx"],
         accept_multiple_files=True,
         key="file_uploader",
-        help="Kéo-thả hoặc nhấn để chọn nhiều file PDF cùng lúc.",
+        help="Kéo-thả hoặc nhấn để chọn nhiều file PDF / DOCX cùng lúc.",
     )
-    st.caption("📎 Hỗ trợ kéo-thả nhiều file PDF cùng lúc")
+    st.caption("📎 Hỗ trợ kéo-thả nhiều file PDF & DOCX cùng lúc")
 
     # Toggle auto-process
     st.toggle(
@@ -718,11 +720,12 @@ def render_upload_section():
                 size_str = f"{file_size / 1024:.0f} KB"
             else:
                 size_str = f"{file_size / (1024 * 1024):.1f} MB"
+            file_icon = "📝" if uf.name.lower().endswith(".docx") else "📄"
 
             st.markdown(
                 f"""
                 <div class="file-card">
-                    <div class="file-icon">📄</div>
+                    <div class="file-icon">{file_icon}</div>
                     <div class="file-info">
                         <div class="file-name">{uf.name}</div>
                         <div class="file-meta">{size_str}</div>
@@ -761,7 +764,7 @@ def render_file_list():
             """
             <div class="empty-files">
                 📭 Chưa có tài liệu nào được xử lý.<br>
-                Hãy tải file PDF lên ở phía trên.
+                Hãy tải file PDF hoặc DOCX lên ở phía trên.
             </div>
             """,
             unsafe_allow_html=True,
@@ -771,10 +774,11 @@ def render_file_list():
     for f in st.session_state.processed_files[::-1]:
         pages = f.get("pages", "?")
         chunks = f.get("chunks", "?")
+        file_icon = "📝" if f["name"].lower().endswith(".docx") else "📄"
         st.markdown(
             f"""
             <div class="file-card">
-                <div class="file-icon">📄</div>
+                <div class="file-icon">{file_icon}</div>
                 <div class="file-info">
                     <div class="file-name">{f['name']}</div>
                     <div class="file-meta">{pages} trang</div>
@@ -821,21 +825,18 @@ def render_chat_history_sidebar():
     # Hiển thị danh sách câu hỏi (mới nhất lên đầu)
     st.caption(f"📋 {len(qa_pairs)} câu hỏi đã được hỏi")
 
-    history_html = '<div class="history-list">'
     for idx, pair in enumerate(reversed(qa_pairs)):
         q_display = pair["question"]
         a_preview = pair["answer"][:120] + "..." if len(pair["answer"]) > 120 else pair["answer"]
-        # Escape HTML
-        q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        history_html += f"""
-        <div class="history-item">
-            <div class="history-question">❓ {q_display}</div>
-            <div class="history-answer-preview">💡 {a_preview}</div>
-        </div>
-        """
-    history_html += '</div>'
-    st.markdown(history_html, unsafe_allow_html=True)
+        # Sanitize: loại bỏ newlines, escape HTML entities và quotes
+        q_display = q_display.replace("\n", " ").replace("\r", " ")
+        a_preview = a_preview.replace("\n", " ").replace("\r", " ")
+        q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        st.markdown(
+            f"""<div class="history-item"><div class="history-question">❓ {q_display}</div><div class="history-answer-preview">💡 {a_preview}</div></div>""",
+            unsafe_allow_html=True,
+        )
 
     # Expander để xem chi tiết từng câu hỏi
     with st.expander("🔎 Xem chi tiết câu hỏi đã hỏi", expanded=False):
@@ -848,80 +849,78 @@ def render_chat_history_sidebar():
                 st.markdown("---")
 
 
+@st.dialog("⚠️ Xác nhận xóa lịch sử")
+def confirm_clear_history_dialog():
+    """Dialog xác nhận xóa lịch sử chat — hiển thị ở giữa màn hình."""
+    st.markdown(
+        """
+        <div class="confirm-dialog">
+            <div class="confirm-title">⚠️ Xác nhận xóa lịch sử</div>
+            <div class="confirm-message">
+                Bạn có chắc chắn muốn xóa <strong>toàn bộ lịch sử chat</strong>?
+                Hành động này không thể hoàn tác.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    confirm_col1, confirm_col2 = st.columns(2)
+    with confirm_col1:
+        if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
+            st.session_state.chat_history = []
+            st.rerun()
+    with confirm_col2:
+        if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
+            st.rerun()
+
+
+@st.dialog("⚠️ Xác nhận xóa tài liệu")
+def confirm_clear_vectorstore_dialog():
+    """Dialog xác nhận xóa vector store — hiển thị ở giữa màn hình."""
+    st.markdown(
+        """
+        <div class="confirm-dialog">
+            <div class="confirm-title">⚠️ Xác nhận xóa tài liệu</div>
+            <div class="confirm-message">
+                Bạn có chắc chắn muốn xóa <strong>toàn bộ tài liệu đã upload</strong>
+                và vector store? Hành động này không thể hoàn tác.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    confirm_col1, confirm_col2 = st.columns(2)
+    with confirm_col1:
+        if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
+            clear_vector_store()
+            st.session_state.vector_store = None
+            st.session_state.processed_files = []
+            st.session_state.total_chunks = 0
+            st.session_state.last_processed_upload_signature = ""
+            st.rerun()
+    with confirm_col2:
+        if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
+            st.rerun()
+
+
 def render_action_buttons():
-    """Render các nút thao tác với confirmation dialog."""
+    """Render các nút thao tác — dialog xác nhận hiển thị ở giữa màn hình."""
     action_col1, action_col2 = st.columns(2)
 
     with action_col1:
         if st.button("🗑️ Xóa lịch sử", use_container_width=True, key="clear_chat_btn"):
-            st.session_state.confirm_clear_history = True
-            st.session_state.confirm_clear_vectorstore = False
+            confirm_clear_history_dialog()
 
     with action_col2:
         if st.button("📦 Xóa tài liệu", use_container_width=True, key="clear_vs_btn"):
-            st.session_state.confirm_clear_vectorstore = True
-            st.session_state.confirm_clear_history = False
-
-    # ── Confirmation Dialog: Clear History ──
-    if st.session_state.confirm_clear_history:
-        st.markdown(
-            """
-            <div class="confirm-dialog">
-                <div class="confirm-title">⚠️ Xác nhận xóa lịch sử</div>
-                <div class="confirm-message">
-                    Bạn có chắc chắn muốn xóa <strong>toàn bộ lịch sử chat</strong>?
-                    Hành động này không thể hoàn tác.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        confirm_col1, confirm_col2 = st.columns(2)
-        with confirm_col1:
-            if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
-                st.session_state.chat_history = []
-                st.session_state.confirm_clear_history = False
-                st.rerun()
-        with confirm_col2:
-            if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
-                st.session_state.confirm_clear_history = False
-                st.rerun()
-
-    # ── Confirmation Dialog: Clear Vector Store ──
-    if st.session_state.confirm_clear_vectorstore:
-        st.markdown(
-            """
-            <div class="confirm-dialog">
-                <div class="confirm-title">⚠️ Xác nhận xóa tài liệu</div>
-                <div class="confirm-message">
-                    Bạn có chắc chắn muốn xóa <strong>toàn bộ tài liệu đã upload</strong>
-                    và vector store? Hành động này không thể hoàn tác.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        confirm_col1, confirm_col2 = st.columns(2)
-        with confirm_col1:
-            if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
-                clear_vector_store()
-                st.session_state.vector_store = None
-                st.session_state.processed_files = []
-                st.session_state.total_chunks = 0
-                st.session_state.last_processed_upload_signature = ""
-                st.session_state.confirm_clear_vectorstore = False
-                st.rerun()
-        with confirm_col2:
-            if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
-                st.session_state.confirm_clear_vectorstore = False
-                st.rerun()
+            confirm_clear_vectorstore_dialog()
 
 
 # ============================================================
 # Document Processing
 # ============================================================
 def process_documents(uploaded_files, upload_signature: str = ""):
-    """Xử lý các file PDF đã upload với giao diện mượt mà."""
+    """Xử lý các file PDF / DOCX đã upload với giao diện mượt mà."""
     st.session_state.is_processing = True
 
     total = len(uploaded_files)
@@ -932,7 +931,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
     progress_bar = st.progress(0, text="Đang chuẩn bị xử lý...")
     status_container = st.empty()
 
-    # === Bước 1 & 2: Đọc PDF và Chunking ===
+    # === Bước 1 & 2: Đọc tài liệu và Chunking ===
     for idx, uploaded_file in enumerate(uploaded_files):
         file_name = uploaded_file.name
         base_progress = idx / total
@@ -947,14 +946,22 @@ def process_documents(uploaded_files, upload_signature: str = ""):
         )
         progress_bar.progress(base_progress + (0.3 / total), text=f"Đọc {file_name}...")
 
+        # Xác định phần mở rộng để giữ nguyên khi lưu file tạm
+        import os as _os
+        _, file_ext = _os.path.splitext(file_name)
+        file_ext = file_ext.lower() if file_ext else ".pdf"
+
         try:
-            # Lưu file tạm
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            # Lưu file tạm với đúng phần mở rộng
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
                 tmp.write(uploaded_file.getbuffer())
                 tmp_path = tmp.name
 
-            # Trích xuất
-            raw_docs = extract_text_from_pdf(tmp_path, source_name=file_name)
+            # Trích xuất (tự động phát hiện định dạng)
+            if file_ext == ".docx":
+                raw_docs = extract_text_from_docx(tmp_path, source_name=file_name)
+            else:
+                raw_docs = extract_text_from_pdf(tmp_path, source_name=file_name)
             num_pages = len(raw_docs)
 
             # Chunking
@@ -1104,12 +1111,12 @@ def render_welcome():
                 <h1>Chào mừng đến SmartDocAI</h1>
                 <p>
                     Trợ lý AI thông minh giúp bạn phân tích và hỏi đáp nội dung
-                    tài liệu PDF. Tải tài liệu lên và bắt đầu trò chuyện ngay!
+                    tài liệu PDF & DOCX. Tải tài liệu lên và bắt đầu trò chuyện ngay!
                 </p>
                 <div class="welcome-steps">
                     <div class="welcome-step">
                         <div class="step-num">1</div>
-                        Tải file PDF lên ở thanh bên trái
+                        Tải file PDF hoặc DOCX lên ở thanh bên trái
                     </div>
                     <div class="welcome-step">
                         <div class="step-num">2</div>
@@ -1200,6 +1207,9 @@ def handle_user_input(user_input: str):
             "sources": result.get("sources", []),
         }
     )
+
+    # Rerun để cập nhật lịch sử hội thoại trong sidebar ngay lập tức
+    st.rerun()
 
 
 # ============================================================
