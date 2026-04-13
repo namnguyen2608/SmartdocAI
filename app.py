@@ -539,14 +539,161 @@ st.markdown(
         border-color: var(--error) !important;
     }
 
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb {
-        background: var(--border-default);
-        border-radius: 999px;
+    /* ── Citation Panel ── */
+    .citation-panel {
+        margin-top: 14px;
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 12px;
     }
-    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+    .citation-badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+    .citation-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: var(--accent-soft);
+        color: var(--accent-hover);
+        border: 1px solid var(--accent-border);
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        transition: var(--transition);
+        white-space: nowrap;
+    }
+    .citation-badge:hover { background: rgba(108,140,255,0.22); }
+    .citation-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+    }
+    .citation-card::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, #6c8cff, #a78bfa);
+        border-radius: 999px 0 0 999px;
+    }
+    .citation-card:hover {
+        border-color: var(--accent-border);
+        background: var(--bg-hover);
+    }
+    .citation-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .citation-title {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .citation-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .citation-page-badge {
+        font-size: 0.68rem;
+        font-weight: 700;
+        background: var(--accent-soft);
+        color: var(--accent);
+        border: 1px solid var(--accent-border);
+        border-radius: var(--radius-sm);
+        padding: 2px 8px;
+    }
+    .citation-type-badge {
+        font-size: 0.65rem;
+        font-weight: 700;
+        background: var(--bg-surface);
+        color: var(--text-muted);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        padding: 2px 7px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    .citation-score-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+    }
+    .citation-score-label {
+        font-size: 0.67rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        min-width: 72px;
+    }
+    .citation-score-bar-bg {
+        flex: 1;
+        height: 5px;
+        background: var(--border-subtle);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .citation-score-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #6c8cff, #a78bfa);
+        transition: width 0.5s ease;
+    }
+    .citation-score-value {
+        font-size: 0.67rem;
+        font-weight: 700;
+        color: var(--accent);
+        min-width: 32px;
+        text-align: right;
+    }
+    .citation-content {
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+        line-height: 1.65;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        max-height: 160px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .citation-content mark {
+        background: rgba(240, 200, 80, 0.28);
+        color: #f0d050;
+        border-radius: 3px;
+        padding: 1px 2px;
+        font-weight: 600;
+    }
+    .citation-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px; height: 20px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-radius: 50%;
+        font-size: 0.65rem;
+        font-weight: 800;
+        flex-shrink: 0;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -1068,6 +1215,7 @@ def render_main():
             role = msg["role"]
             content = msg["content"]
             sources = msg.get("sources", [])
+            question_ctx = msg.get("question_ctx", "")
             if role == "user":
                 with st.chat_message("user", avatar="👤"):
                     st.markdown(content)
@@ -1075,7 +1223,7 @@ def render_main():
                 with st.chat_message("assistant", avatar="🧠"):
                     st.markdown(content)
                     if sources:
-                        render_sources(sources)
+                        render_sources(sources, question=question_ctx)
 
     # Chat input
     if prompt := st.chat_input(
@@ -1152,16 +1300,97 @@ def render_welcome():
                 handle_user_input(example)
 
 
-def render_sources(sources):
-    """Hiển thị nguồn tham khảo dạng tags."""
-    source_html = " ".join(
-        f'<span class="source-tag">📄 {s["file"]} — Trang {s["page"]}</span>'
-        for s in sources
+
+def highlight_text(text: str, query: str) -> str:
+    """
+    Escape HTML trong text rồi highlight các từ từ query bằng thẻ <mark>.
+    Case-insensitive. Chỉ highlight các token dài >= 2 ký tự.
+    """
+    import re
+    import html
+
+    safe = html.escape(text)
+    tokens = [
+        t for t in re.split(r"[\s\W]+", query)
+        if len(t) >= 2
+    ]
+    if not tokens:
+        return safe
+
+    pattern = "|".join(re.escape(t) for t in tokens)
+    highlighted = re.sub(
+        pattern,
+        lambda m: f'<mark>{html.escape(m.group(0))}</mark>',
+        safe,
+        flags=re.IGNORECASE,
     )
+    return highlighted
+
+
+def render_sources(sources: list, question: str = ""):
+    """Hiển thị nguồn trích dẫn: badge row nhanh + expander chi tiết."""
+    if not sources:
+        return
+
+    # ── Badge row ──
+    badges_html = ""
+    for s in sources:
+        file_label = s['file']
+        page = s.get('page', '?')
+        total = s.get('total_pages')
+        page_str = f"Trang {page}/{total}" if total else f"Trang {page}"
+        badges_html += (
+            f'<span class="citation-badge">'
+            f'📄 {file_label} — {page_str}'
+            f'</span>'
+        )
+
     st.markdown(
-        f'<div style="margin-top: 10px;">{source_html}</div>',
+        f'<div class="citation-panel">'
+        f'<div class="citation-badge-row">{badges_html}</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
+
+    # ── Expander chi tiết ──
+    with st.expander(f"📖 Xem {len(sources)} nguồn trích dẫn", expanded=False):
+        for s in sources:
+            file_label = s['file']
+            page = s.get('page', '?')
+            total = s.get('total_pages')
+            file_type = s.get('file_type', 'pdf').upper()
+            score = s.get('score', 0.0)
+            content = s.get('content', '')
+            chunk_idx = s.get('chunk_index', '')
+
+            page_str = f"Trang {page} / {total}" if total else f"Trang {page}"
+            score_pct = int(score * 100)
+            file_icon = "📄" if file_type == "PDF" else "📝"
+
+            highlighted_content = highlight_text(content, question) if question else __import__('html').escape(content)
+
+            card_html = f"""
+<div class="citation-card">
+  <div class="citation-header">
+    <div class="citation-title">
+      <span class="citation-num">{chunk_idx}</span>
+      {file_icon} {__import__('html').escape(file_label)}
+    </div>
+    <div class="citation-meta">
+      <span class="citation-page-badge">{page_str}</span>
+      <span class="citation-type-badge">{file_type}</span>
+    </div>
+  </div>
+  <div class="citation-score-wrap">
+    <span class="citation-score-label">🔍 Độ liên quan</span>
+    <div class="citation-score-bar-bg">
+      <div class="citation-score-bar-fill" style="width:{score_pct}%;"></div>
+    </div>
+    <span class="citation-score-value">{score_pct}%</span>
+  </div>
+  <div class="citation-content">{highlighted_content}</div>
+</div>"""
+            st.markdown(card_html, unsafe_allow_html=True)
 
 
 def handle_user_input(user_input: str):
@@ -1188,7 +1417,7 @@ def handle_user_input(user_input: str):
 
         # Hiển thị nguồn tham khảo
         if result["sources"]:
-            render_sources(result["sources"])
+            render_sources(result["sources"], question=user_input)
 
         # Hiển thị lỗi nếu có
         if result["error"] and not result.get("used_fallback", False):
@@ -1205,6 +1434,7 @@ def handle_user_input(user_input: str):
             "role": "assistant",
             "content": result["answer"],
             "sources": result.get("sources", []),
+            "question_ctx": user_input,  # lưu để highlight lại khi render history
         }
     )
 
