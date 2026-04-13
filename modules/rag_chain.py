@@ -32,8 +32,9 @@ RAG_PROMPT_TEMPLATE = """Bạn là SmartDocAI, một trợ lý AI thông minh ch
 3. Trích dẫn nguồn (tên file, số trang) khi có thể.
 4. Trả lời có cấu trúc, rõ ràng, dễ đọc.
 5. Không bịa đặt thông tin ngoài CONTEXT.
+6. Nếu câu hỏi liên quan đến lịch sử hội thoại, hãy tham chiếu các câu trả lời trước đó.
 
-### CONTEXT:
+{chat_history_section}### CONTEXT:
 {context}
 
 ### CÂU HỎI:
@@ -195,11 +196,22 @@ def ask_question(
         # Bước 2: Khởi tạo LLM
         llm = get_llm()
 
+        # Bước 2.5: Format lịch sử hội thoại (Q6 - Conversational RAG)
+        chat_history_section = ""
+        if chat_history:
+            # Lấy tối đa 6 turns gần nhất (3 cặp hỏi-đáp) để tránh quá dài
+            recent_history = [m for m in chat_history if m.get("role") in ("user", "assistant")][-6:]
+            if recent_history:
+                lines = []
+                for msg in recent_history:
+                    role_label = "Người dùng" if msg["role"] == "user" else "Trợ lý"
+                    lines.append(f"{role_label}: {msg['content']}")
+                chat_history_section = "### LỊCH SỬ HỘI THOẠI:\n" + "\n".join(lines) + "\n\n"
+
         # Bước 3: Xử lý dựa trên việc có/không có tài liệu
         if vector_store is None:
             # Dùng prompt thông báo chưa có tài liệu
             prompt = ChatPromptTemplate.from_template(NO_CONTEXT_PROMPT_TEMPLATE)
-            # Lưu ý: Cần truyền language_instruction nếu NO_CONTEXT_PROMPT_TEMPLATE dùng nó
             language_instruction = get_language_instruction(language) 
             chain = prompt | llm
             response = chain.invoke({
@@ -208,7 +220,7 @@ def ask_question(
             })
             result["answer"] = response.content
         else:
-            # Pipeline RAG đầy đủ (Cập nhật theo Listing 6 và Mục 7.2)
+            # Pipeline RAG đầy đủ
             relevant_docs = similarity_search(vector_store, question)
             context = format_context(relevant_docs)
 
@@ -220,6 +232,7 @@ def ask_question(
                 "question": question,
                 "context": context,
                 "language_instruction": language_instruction,
+                "chat_history_section": chat_history_section,
             })
 
             result["answer"] = response.content
