@@ -1181,6 +1181,7 @@ def handle_user_input(user_input: str):
             result = ask_question(
                 question=user_input,
                 vector_store=st.session_state.vector_store,
+                chat_history=st.session_state.chat_history,
             )
 
         # Hiển thị câu trả lời
