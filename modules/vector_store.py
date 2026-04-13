@@ -151,25 +151,62 @@ def add_documents_to_store(
 def similarity_search(
     vector_store: FAISS, query: str, top_k: Optional[int] = None
 ) -> List[Document]:
-    
+    """Tìm kiếm similarity và trả về danh sách Document."""
     _top_k = top_k or config.RETRIEVAL_TOP_K
     _fetch_k = config.RETRIEVAL_FETCH_K
     _lambda_mult = config.RETRIEVAL_LAMBDA_MULT
 
     try:
         results = vector_store.max_marginal_relevance_search(
-            query, 
-            k=_top_k, 
+            query,
+            k=_top_k,
             fetch_k=_fetch_k,
-            lambda_mult=_lambda_mult
+            lambda_mult=_lambda_mult,
         )
-        
+
         logger.info(f"Tìm thấy {len(results)} kết quả (fetch_k={_fetch_k}) cho query: '{query[:50]}...'")
         return results
 
     except Exception as e:
         logger.error(f"Lỗi khi tìm kiếm: {str(e)}")
         return []
+
+
+def similarity_search_with_scores(
+    vector_store: FAISS, query: str, top_k: Optional[int] = None
+) -> List[tuple]:
+    """
+    Tìm kiếm similarity và trả về danh sách (Document, relevance_score).
+
+    Score được chuẩn hoá về [0, 1] — số càng cao càng liên quan.
+    Sử dụng similarity_search_with_relevance_scores của FAISS.
+
+    Args:
+        vector_store: FAISS vector store instance
+        query: Câu truy vấn
+        top_k: Số kết quả tối đa
+
+    Returns:
+        Danh sách tuple (Document, float) sắp xếp theo score giảm dần
+    """
+    _top_k = top_k or config.RETRIEVAL_TOP_K
+
+    try:
+        # similarity_search_with_relevance_scores trả về score đã chuẩn hoá [0,1]
+        results = vector_store.similarity_search_with_relevance_scores(
+            query,
+            k=_top_k,
+        )
+        logger.info(
+            f"[with_scores] Tìm thấy {len(results)} kết quả cho query: '{query[:50]}...'"
+        )
+        return results  # list of (Document, float)
+
+    except Exception as e:
+        logger.error(f"Lỗi khi tìm kiếm với score: {str(e)}")
+        # Fallback: dùng MMR không có score, gán score = 0.0
+        docs = similarity_search(vector_store, query, top_k)
+        return [(doc, 0.0) for doc in docs]
 
 
 def clear_vector_store(index_name: Optional[str] = None) -> bool:
