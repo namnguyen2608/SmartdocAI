@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SmartDocAI - Streamlit Application
 Giao diện chatbot hỏi đáp tài liệu PDF với RAG
@@ -27,6 +28,9 @@ from modules.vector_store import (
     load_vector_store,
     add_documents_to_store,
     clear_vector_store,
+    create_bm25_retriever,       # Q7
+    create_ensemble_retriever,   # Q7
+    get_cached_bm25_retriever,   # Q7
 )
 from modules.rag_chain import ask_question, check_ollama_connection
 
@@ -714,6 +718,11 @@ def init_session_state():
         "is_processing": False,
         "auto_process_upload": True,
         "last_processed_upload_signature": "",
+        # Q7 — Hybrid Search
+        "hybrid_enabled": False,
+        "raw_documents": [],        # toàn bộ chunks để xây BM25
+        # Q8 — Metadata Filtering
+        "active_file_filter": [],   # danh sách file đang được lọc
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -780,6 +789,18 @@ def render_sidebar():
         # ── Danh sách file ──
         st.markdown('<div class="section-header">📂 Tài liệu đã xử lý</div>', unsafe_allow_html=True)
         render_file_list()
+
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+
+        # ── Q8: Metadata Filter ──
+        st.markdown('<div class="section-header">🔍 Lọc tài liệu (Q8)</div>', unsafe_allow_html=True)
+        render_metadata_filter()
+
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+
+        # ── Q7: Hybrid Search ──
+        st.markdown('<div class="section-header">🔀 Hybrid Search (Q7)</div>', unsafe_allow_html=True)
+        render_hybrid_toggle()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
@@ -885,14 +906,19 @@ def render_upload_section():
 
         # Nút xử lý thủ công
         btn_label = "⏳ Đang xử lý..." if st.session_state.is_processing else "🚀 Xử lý tài liệu"
+        already_processed = (
+            upload_signature == st.session_state.last_processed_upload_signature
+        )
         if st.button(
             btn_label,
             use_container_width=True,
             type="primary",
-            disabled=st.session_state.is_processing,
+            disabled=st.session_state.is_processing or already_processed,
             key="process_btn",
+            help="Tài liệu đã được xử lý" if already_processed else None,
         ):
-            process_documents(uploaded_files, upload_signature=upload_signature)
+            if not already_processed:
+                process_documents(uploaded_files, upload_signature=upload_signature)
 
         # Auto-process
         if (
@@ -1044,10 +1070,73 @@ def confirm_clear_vectorstore_dialog():
             st.session_state.processed_files = []
             st.session_state.total_chunks = 0
             st.session_state.last_processed_upload_signature = ""
+            st.session_state.raw_documents = []        # Q7: reset BM25 data
+            st.session_state.active_file_filter = []   # Q8: reset filter
             st.rerun()
     with confirm_col2:
         if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
             st.rerun()
+
+
+def render_metadata_filter():
+    """
+    Q8 — Metadata Filtering: cho phép người dùng chọn file để giới hạn tìm kiếm.
+    Chỉ hiển thị khi có ít nhất 1 file đã xử lý.
+    """
+    files = st.session_state.processed_files
+    if not files:
+        st.markdown(
+            '<div class="empty-files">📭 Chưa có tài liệu nào để lọc.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    file_names = [f["name"] for f in files]
+    selected = st.multiselect(
+        "Chỉ tìm kiếm trong:",
+        options=file_names,
+        default=st.session_state.active_file_filter,
+        placeholder="Chọn file (bỏ trống = tất cả)",
+        key="file_filter_select",
+        help="Lọc câu trả lời chỉ từ các file được chọn. Bỏ chọn để tìm toàn bộ.",
+    )
+    st.session_state.active_file_filter = selected
+
+    if selected:
+        st.caption(f"🔒 Đang lọc: {len(selected)}/{len(file_names)} file")
+    else:
+        st.caption("🌐 Tìm kiếm toàn bộ tài liệu")
+
+
+def render_hybrid_toggle():
+    """
+    Q7 — Hybrid Search: toggle BM25 + Vector Ensemble.
+    Hiển thị trọng số hiện tại và thông báo khi chưa có tài liệu.
+    """
+    has_docs = bool(st.session_state.raw_documents)
+
+    hybrid_on = st.toggle(
+        "Bật Hybrid Search (BM25 + Vector)",
+        value=st.session_state.hybrid_enabled,
+        disabled=not has_docs,
+        key="hybrid_toggle",
+        help=(
+            "Kết hợp tìm kiếm ngữ nghĩa (FAISS) với tìm kiếm từ khoá (BM25). "
+            "Hiệu quả hơn với câu hỏi chứa tên riêng, mã số, hoặc từ khoá chuyên ngành."
+        ),
+    )
+    st.session_state.hybrid_enabled = hybrid_on
+
+    if not has_docs:
+        st.caption("⚠️ Tải tài liệu lên để kích hoạt Hybrid Search")
+    elif hybrid_on:
+        import config as _cfg
+        st.caption(
+            f"⚡ Đang dùng: Vector {int(_cfg.HYBRID_VECTOR_WEIGHT*100)}% "
+            f"+ BM25 {int(_cfg.HYBRID_BM25_WEIGHT*100)}%"
+        )
+    else:
+        st.caption("🔵 Đang dùng: Pure Vector Search (FAISS)")
 
 
 def render_action_buttons():
@@ -1069,6 +1158,14 @@ def render_action_buttons():
 def process_documents(uploaded_files, upload_signature: str = ""):
     """Xử lý các file PDF / DOCX đã upload với giao diện mượt mà."""
     st.session_state.is_processing = True
+
+    # Reset toàn bộ vector store cũ (kể cả dữ liệu từ session trước trên disk)
+    # để đảm bảo chỉ tìm kiếm trong đúng các file đang upload lần này
+    clear_vector_store()
+    st.session_state.vector_store = None
+    st.session_state.raw_documents = []
+    st.session_state.processed_files = []
+    st.session_state.total_chunks = 0
 
     total = len(uploaded_files)
     all_chunks = []
@@ -1172,6 +1269,9 @@ def process_documents(uploaded_files, upload_signature: str = ""):
             # Cập nhật thông tin
             st.session_state.processed_files.extend(new_files_info)
             st.session_state.total_chunks += len(all_chunks)
+
+            # Q7: lưu raw docs để xây BM25 retriever (reset khi xóa rồi upload lại)
+            st.session_state.raw_documents.extend(all_chunks)
 
             progress_bar.progress(1.0, text="Hoàn tất!")
 
@@ -1407,14 +1507,39 @@ def handle_user_input(user_input: str):
     # Tạo câu trả lời
     with st.chat_message("assistant", avatar="🧠"):
         with st.spinner("🤔 Đang phân tích và suy nghĩ..."):
+            # Q7 — xây EnsembleRetriever nếu hybrid bật
+            retriever = None
+            if st.session_state.hybrid_enabled and st.session_state.vector_store is not None:
+                bm25 = get_cached_bm25_retriever()
+                if bm25 is None and st.session_state.raw_documents:
+                    bm25 = create_bm25_retriever(st.session_state.raw_documents)
+                if bm25 is not None:
+                    retriever = create_ensemble_retriever(
+                        st.session_state.vector_store, bm25
+                    )
+
             result = ask_question(
                 question=user_input,
                 vector_store=st.session_state.vector_store,
                 chat_history=st.session_state.chat_history,
+                retriever=retriever,                              # Q7
+                file_filter=st.session_state.active_file_filter, # Q8
             )
 
         # Hiển thị câu trả lời
         st.markdown(result["answer"])
+
+        # Q7/Q8 — badge chế độ tìm kiếm
+        mode = result.get("search_mode", "vector")
+        active_filter = result.get("active_filter", [])
+        badge_parts = []
+        if mode == "hybrid":
+            badge_parts.append("🔀 Hybrid Search (BM25 + Vector)")
+        else:
+            badge_parts.append("🔵 Vector Search")
+        if active_filter:
+            badge_parts.append(f"🔒 Lọc: {', '.join(active_filter)}")
+        st.caption(" · ".join(badge_parts))
 
         # Hiển thị nguồn tham khảo
         if result["sources"]:
