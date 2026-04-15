@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SmartDocAI - Document Processor
 Xử lý tài liệu PDF và DOCX: đọc, trích xuất văn bản, chia nhỏ (chunking)
@@ -5,6 +6,7 @@ Xử lý tài liệu PDF và DOCX: đọc, trích xuất văn bản, chia nhỏ 
 
 import os
 import logging
+from datetime import date
 from typing import List, Optional
 
 from PyPDF2 import PdfReader
@@ -56,6 +58,7 @@ def extract_text_from_pdf(file_path: str, source_name: Optional[str] = None) -> 
                         "page": page_num + 1,
                         "total_pages": total_pages,
                         "file_type": "pdf",
+                        "upload_date": date.today().isoformat(),
                     },
                 )
                 documents.append(doc)
@@ -147,6 +150,7 @@ def extract_text_from_docx(file_path: str, source_name: Optional[str] = None) ->
                             "page": virtual_page,
                             "total_pages": None,   # sẽ cập nhật sau
                             "file_type": "docx",
+                            "upload_date": date.today().isoformat(),
                         },
                     )
                 )
@@ -168,6 +172,7 @@ def extract_text_from_docx(file_path: str, source_name: Optional[str] = None) ->
                         "page": virtual_page,
                         "total_pages": None,
                         "file_type": "docx",
+                        "upload_date": date.today().isoformat(),
                     },
                 )
             )
