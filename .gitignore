@@ -43,6 +43,9 @@ data/uploads/
 # FAISS index (có thể rất lớn)
 vectorstore/
 
+# Benchmark cache (dữ liệu lớn, không cần commit)
+benchmark_cache/
+
 # Temp files
 *.tmp
 tmp_*

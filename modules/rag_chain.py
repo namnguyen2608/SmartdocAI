@@ -231,6 +231,18 @@ def ask_question(
         "used_fallback": False,
     }
 
+    # Validate đầu vào: câu hỏi không được rỗng hoặc None
+    if not question or not str(question).strip():
+        result["answer"] = (
+            "Vui lòng nhập câu hỏi của bạn trước khi gửi."
+            if detect_language(question or "") == "vi"
+            else "Please enter your question before submitting."
+        )
+        result["error"] = "empty_question"
+        return result
+
+    question = str(question).strip()
+
     try:
         # B╞░ß╗¢c 1: Ph├ít hiß╗çn ng├┤n ngß╗»
         language = detect_language(question)

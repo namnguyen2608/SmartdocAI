@@ -100,3 +100,90 @@ Chỉnh sửa `config.py` để thay đổi:
 | `CHUNK_SIZE` | `1000` | Kích thước chunk |
 | `CHUNK_OVERLAP` | `200` | Overlap giữa chunks |
 | `RETRIEVAL_TOP_K` | `4` | Số chunks trả về khi tìm kiếm |
+
+---
+
+## 🧪 Kiểm thử (Testing)
+
+### Cài đặt pytest
+
+```bash
+pip install pytest
+```
+
+### Chạy unit tests (không cần Ollama)
+
+```bash
+pytest tests/ -v -m "not integration"
+```
+
+### Chạy tất cả tests (cần Ollama + embedding model)
+
+```bash
+pytest tests/ -v
+```
+
+### Chạy integration tests riêng lẻ
+
+```bash
+pytest tests/ -v -m integration
+```
+
+### Chạy theo module cụ thể
+
+```bash
+pytest tests/test_language_detector.py -v
+pytest tests/test_document_processor.py -v
+pytest tests/test_rag_chain.py -v
+pytest tests/test_vector_store.py -v
+```
+
+---
+
+## 🏗️ Kiến trúc hệ thống
+
+```
+User (Streamlit UI - app.py)
+       │
+       ▼
+  language_detector.py
+  → Phát hiện ngôn ngữ câu hỏi (vi / en)
+       │
+       ▼
+  rag_chain.py (ask_question)
+  → Gọi LLM qua Ollama
+  → Hybrid retrieval (BM25 + FAISS)
+       │
+       ├──▶ vector_store.py
+       │    → FAISS index (similarity search)
+       │    → Embedding: MPNet multilingual
+       │
+       ├──▶ BM25Retriever
+       │    → Sparse keyword matching
+       │
+       └──▶ EnsembleRetriever
+            → FAISS 60% + BM25 40%
+            → MMR reranking
+       │
+       ▼
+  document_processor.py
+  → Extract text từ PDF/DOCX
+  → Chunking (size=1000, overlap=200)
+```
+
+---
+
+## ⚙️ Cấu hình chi tiết (Configuration Reference)
+
+| Nhóm | Tham số | Mặc định | Mô tả |
+|---|---|---|---|
+| **LLM** | `OLLAMA_MODEL` | `qwen2.5:7b` | Model LangChain |
+| **LLM** | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| **LLM** | `LLM_TEMPERATURE` | `0.1` | Độ sáng tạo (0=xác định, 1=ngẫu nhiên) |
+| **Embedding** | `EMBEDDING_MODEL` | `paraphrase-multilingual-mpnet-base-v2` | Model embedding 768-dim |
+| **Chunking** | `CHUNK_SIZE` | `1000` | Số ký tự mỗi chunk |
+| **Chunking** | `CHUNK_OVERLAP` | `200` | Ký tự chồng lặp giữa chunks |
+| **Retrieval** | `TOP_K` | `3` | Số chunk FAISS trả về |
+| **Retrieval** | `FETCH_K` | `30` | Số chunk FAISS lấy trước khi MMR rerank |
+| **Hybrid** | `VECTOR_WEIGHT` | `0.6` | Trọng số FAISS trong hybrid search |
+| **Hybrid** | `BM25_WEIGHT` | `0.4` | Trọng số BM25 trong hybrid search |

@@ -815,6 +815,8 @@ def render_sidebar():
         render_action_buttons()
 
 
+# ── Sidebar helpers ──────────────────────────────────────────────────────────
+
 def render_system_status():
     """Kiểm tra và hiển thị trạng thái Ollama."""
     if st.session_state.ollama_status is None:
@@ -1152,6 +1154,9 @@ def render_action_buttons():
             confirm_clear_vectorstore_dialog()
 
 
+# ── End sidebar helpers ───────────────────────────────────────────────────────
+
+
 # ============================================================
 # Document Processing
 # ============================================================
@@ -1333,6 +1338,8 @@ def render_main():
         handle_user_input(prompt)
 
 
+# ── Main area helpers ────────────────────────────────────────────────────────
+
 def render_welcome():
     """Render welcome hero khi chưa có cuộc hội thoại."""
     has_docs = len(st.session_state.processed_files) > 0
@@ -1492,6 +1499,8 @@ def render_sources(sources: list, question: str = ""):
 </div>"""
             st.markdown(card_html, unsafe_allow_html=True)
 
+
+# ── User input handler ────────────────────────────────────────────────────────────
 
 def handle_user_input(user_input: str):
     """Xử lý input từ người dùng."""

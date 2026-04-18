@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+SmartDocAI - Language Detector
+Phát hiện ngôn ngữ của câu truy vấn và tạo prompt theo ngôn ngữ tương ứng.
+Hỗ trợ: Tiếng Việt (vi) và Tiếng Anh (en).
+"""
 import re
 import logging
 
@@ -19,6 +24,19 @@ VIETNAMESE_WORDS = {
 VNI_CHARS_SIMPLE = 'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ'
 
 def detect_language(text: str) -> str:
+    """
+    Phát hiện ngôn ngữ của đoạn văn bản đầu vào.
+
+    Thuật toán 2 bước:
+    1. Kiểm tra ký tự có dấu tiếng Việt (nhanh, O(n) ký tự).
+    2. Fallback: kiểm tra từ phổ biến tiếng Việt không dấu.
+
+    Args:
+        text: Văn bản cần phát hiện ngôn ngữ.
+
+    Returns:
+        'vi' nếu là tiếng Việt, 'en' cho tất cả các ngôn ngữ khác.
+    """
     if not text or not text.strip():
         return "en"
     
