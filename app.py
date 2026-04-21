@@ -723,6 +723,11 @@ def init_session_state():
         "raw_documents": [],        # toàn bộ chunks để xây BM25
         # Q8 — Metadata Filtering
         "active_file_filter": [],   # danh sách file đang được lọc
+        "reranker_enabled": False,
+        "self_rag_enabled": False,
+        "self_rag_query_rewrite": True,
+        "self_rag_relevance_filter": True,
+        "self_rag_answer_grading": True,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -801,6 +806,14 @@ def render_sidebar():
         # ── Q7: Hybrid Search ──
         st.markdown('<div class="section-header">🔀 Hybrid Search (Q7)</div>', unsafe_allow_html=True)
         render_hybrid_toggle()
+
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">🎯 Re-ranking (Q9)</div>', unsafe_allow_html=True)
+        render_reranker_toggle()
+
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">🧠 Self-RAG (Q10)</div>', unsafe_allow_html=True)
+        render_self_rag_toggle()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
@@ -1140,6 +1153,108 @@ def render_hybrid_toggle():
     else:
         st.caption("🔵 Đang dùng: Pure Vector Search (FAISS)")
 
+
+def render_reranker_toggle():
+    """Q9 — Cross-Encoder Re-ranking."""
+    has_docs = st.session_state.vector_store is not None
+    reranker_on = st.toggle(
+        "Bật Re-ranking (Cross-Encoder)",
+        value=st.session_state.reranker_enabled,
+        disabled=not has_docs,
+        key="reranker_toggle",
+        help=(
+            "Sau khi FAISS/BM25 lấy candidates, Cross-Encoder đánh giá lại "
+            "từng cặp (query, passage) để xếp hạng chính xác hơn."
+        ),
+    )
+    st.session_state.reranker_enabled = reranker_on
+    if not has_docs:
+        st.caption("⚠️ Tải tài liệu để kích hoạt Re-ranking")
+    elif reranker_on:
+        st.caption("🎯 Cross-Encoder: ms-marco-MiniLM-L-6-v2")
+    else:
+        st.caption("🔵 Dùng Bi-Encoder scores (FAISS)")
+
+
+def render_self_rag_toggle():
+    """Q10 — Self-RAG."""
+    has_docs = st.session_state.vector_store is not None
+    self_rag_on = st.toggle(
+        "Bật Self-RAG (AI tự đánh giá)",
+        value=st.session_state.self_rag_enabled,
+        disabled=not has_docs,
+        key="self_rag_toggle",
+        help="LLM tự viết lại query, lọc docs, sinh câu trả lời rồi tự đánh giá.",
+    )
+    st.session_state.self_rag_enabled = self_rag_on
+    if self_rag_on and has_docs:
+        st.session_state.self_rag_query_rewrite = st.checkbox(
+            "Query Rewriting", value=st.session_state.self_rag_query_rewrite,
+            key="self_rag_qr", help="Tự động viết lại câu hỏi thành 3 variants",
+        )
+        st.session_state.self_rag_relevance_filter = st.checkbox(
+            "Relevance Filtering", value=st.session_state.self_rag_relevance_filter,
+            key="self_rag_rf", help="Lọc docs không liên quan",
+        )
+        st.session_state.self_rag_answer_grading = st.checkbox(
+            "Answer Grading", value=st.session_state.self_rag_answer_grading,
+            key="self_rag_ag", help="Tự đánh giá chất lượng câu trả lời",
+        )
+        st.caption("🧠 Multi-hop reasoning: tự động bật khi cần")
+    elif not has_docs:
+        st.caption("⚠️ Tải tài liệu để kích hoạt Self-RAG")
+    else:
+        st.caption("🔵 Dùng RAG thông thường")
+
+
+def render_self_rag_metadata(result: dict):
+    """Hiển thị panel Self-RAG Analysis sau câu trả lời."""
+    confidence = result.get("confidence_score", 0.5)
+    is_grounded = result.get("is_grounded", True)
+    has_hallucination = result.get("has_hallucination", False)
+    feedback = result.get("grading_feedback", "")
+    rewritten = result.get("rewritten_queries", [])
+    docs_before = result.get("docs_before_filter", 0)
+    docs_after = result.get("docs_after_filter", 0)
+    sub_questions = result.get("sub_questions", [])
+    used_multihop = result.get("used_multihop", False)
+
+    conf_pct = int(confidence * 100)
+    conf_icon = "✅" if conf_pct >= 70 else ("⚠️" if conf_pct >= 40 else "❌")
+    conf_label = "Cao" if conf_pct >= 70 else ("Trung bình" if conf_pct >= 40 else "Thấp")
+    hallucination_icon = "🚨 Có thể có hallucination" if has_hallucination else "✅ Không phát hiện hallucination"
+    grounded_icon = "✅ Dựa trên tài liệu" if is_grounded else "⚠️ Có thể tự bịa"
+    multihop_str = f"| 🔀 Multi-hop: {len(sub_questions)} sub-questions" if used_multihop else ""
+    feedback_html = f"<div style='color:#9aa5bc;margin-bottom:6px;'>💬 <em>{feedback}</em></div>" if feedback else ""
+
+    st.markdown(
+        f"""<div style="background:rgba(108,140,255,0.08);border:1px solid rgba(108,140,255,0.25);
+        border-radius:12px;padding:14px 16px;margin-top:10px;font-size:0.82rem;">
+            <div style="font-weight:700;color:#9aa5bc;margin-bottom:10px;font-size:0.7rem;
+            text-transform:uppercase;letter-spacing:0.08em;">🧠 Self-RAG Analysis</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+                <span>{conf_icon} Confidence: <strong>{conf_pct}% ({conf_label})</strong></span>
+                <span>{grounded_icon}</span>
+                <span>{hallucination_icon}</span>
+            </div>
+            {feedback_html}
+            <div style='color:#6b7894;font-size:0.72rem;'>
+                📊 Docs: {docs_before} retrieved → {docs_after} sau filter {multihop_str}
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    if len(rewritten) > 1:
+        with st.expander("🔍 Xem Query Rewriting", expanded=False):
+            for i, q in enumerate(rewritten):
+                label = "📌 Gốc" if i == 0 else f"✏️ Variant {i}"
+                st.markdown(f"**{label}:** {q}")
+
+    if sub_questions:
+        with st.expander("🔗 Multi-hop Sub-questions", expanded=False):
+            for sq in sub_questions:
+                st.markdown(f"• {sq}")
 
 def render_action_buttons():
     """Render các nút thao tác — dialog xác nhận hiển thị ở giữa màn hình."""
@@ -1503,77 +1618,117 @@ def render_sources(sources: list, question: str = ""):
 # ── User input handler ────────────────────────────────────────────────────────────
 
 def handle_user_input(user_input: str):
-    """Xử lý input từ người dùng."""
-    # Thêm câu hỏi vào history
-    st.session_state.chat_history.append(
-        {"role": "user", "content": user_input}
-    )
-
-    # Hiển thị câu hỏi
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+ 
     with st.chat_message("user", avatar="👤"):
         st.markdown(user_input)
-
-    # Tạo câu trả lời
+ 
     with st.chat_message("assistant", avatar="🧠"):
         with st.spinner("🤔 Đang phân tích và suy nghĩ..."):
-            # Q7 — xây EnsembleRetriever nếu hybrid bật
-            retriever = None
-            if st.session_state.hybrid_enabled and st.session_state.vector_store is not None:
-                bm25 = get_cached_bm25_retriever()
-                if bm25 is None and st.session_state.raw_documents:
-                    bm25 = create_bm25_retriever(st.session_state.raw_documents)
-                if bm25 is not None:
-                    retriever = create_ensemble_retriever(
-                        st.session_state.vector_store, bm25
+ 
+            # ── Q10: Self-RAG Pipeline ────────────────────────────────
+            if st.session_state.self_rag_enabled and st.session_state.vector_store is not None:
+                llm = get_llm()
+                result = self_rag_pipeline(
+                    question=user_input,
+                    vector_store=st.session_state.vector_store,
+                    llm=llm,
+                    enable_query_rewrite=st.session_state.self_rag_query_rewrite,
+                    enable_relevance_filter=st.session_state.self_rag_relevance_filter,
+                    enable_answer_grading=st.session_state.self_rag_answer_grading,
+                )
+                result["search_mode"] = "self_rag"
+                result["active_filter"] = st.session_state.active_file_filter
+                self_rag_meta = result  # lưu lại để render
+ 
+            else:
+                self_rag_meta = None
+ 
+                # ── Q7: Hybrid Search ─────────────────────────────────
+                retriever = None
+                if st.session_state.hybrid_enabled and st.session_state.vector_store is not None:
+                    bm25 = get_cached_bm25_retriever()
+                    if bm25 is None and st.session_state.raw_documents:
+                        bm25 = create_bm25_retriever(st.session_state.raw_documents)
+                    if bm25 is not None:
+                        retriever = create_ensemble_retriever(st.session_state.vector_store, bm25)
+ 
+                result = ask_question(
+                    question=user_input,
+                    vector_store=st.session_state.vector_store,
+                    chat_history=st.session_state.chat_history,
+                    retriever=retriever,
+                    file_filter=st.session_state.active_file_filter,
+                )
+ 
+                # ── Q9: Cross-Encoder Reranking ───────────────────────
+                if (
+                    st.session_state.reranker_enabled
+                    and st.session_state.vector_store is not None
+                ):
+                    doc_score_pairs = similarity_search_with_scores(
+                        st.session_state.vector_store, user_input
                     )
-
-            result = ask_question(
-                question=user_input,
-                vector_store=st.session_state.vector_store,
-                chat_history=st.session_state.chat_history,
-                retriever=retriever,                              # Q7
-                file_filter=st.session_state.active_file_filter, # Q8
-            )
-
-        # Hiển thị câu trả lời
+                    if doc_score_pairs:
+                        reranked = rerank_with_cross_encoder(user_input, doc_score_pairs, top_k=3)
+                        reranked_sources = []
+                        for idx, (doc, bi_score, ce_score) in enumerate(reranked):
+                            fname = os.path.basename(str(doc.metadata.get("source", "N/A")))
+                            reranked_sources.append({
+                                "file": fname,
+                                "page": doc.metadata.get("page", "N/A"),
+                                "total_pages": doc.metadata.get("total_pages"),
+                                "file_type": doc.metadata.get("file_type", "pdf"),
+                                "content": doc.page_content,
+                                "chunk_index": idx + 1,
+                                "score": ce_score,          # cross-encoder score
+                                "bi_encoder_score": bi_score,  # bi-encoder score để so sánh
+                            })
+                        result["sources"] = reranked_sources
+                        result["search_mode"] = result.get("search_mode", "vector") + "+reranked"
+ 
+        # ── Hiển thị câu trả lời ─────────────────────────────────────
         st.markdown(result["answer"])
-
-        # Q7/Q8 — badge chế độ tìm kiếm
+ 
+        # ── Q10: Self-RAG metadata panel ─────────────────────────────
+        if self_rag_meta:
+            render_self_rag_metadata(self_rag_meta)
+ 
+        # ── Badge chế độ tìm kiếm ────────────────────────────────────
         mode = result.get("search_mode", "vector")
         active_filter = result.get("active_filter", [])
         badge_parts = []
-        if mode == "hybrid":
-            badge_parts.append("🔀 Hybrid Search (BM25 + Vector)")
+        if "self_rag" in mode:
+            badge_parts.append("🧠 Self-RAG")
+        elif "hybrid" in mode:
+            badge_parts.append("🔀 Hybrid Search")
         else:
             badge_parts.append("🔵 Vector Search")
+        if "reranked" in mode:
+            badge_parts.append("🎯 Cross-Encoder Reranked")
         if active_filter:
             badge_parts.append(f"🔒 Lọc: {', '.join(active_filter)}")
         st.caption(" · ".join(badge_parts))
-
-        # Hiển thị nguồn tham khảo
-        if result["sources"]:
+ 
+        # ── Sources ───────────────────────────────────────────────────
+        if result.get("sources"):
             render_sources(result["sources"], question=user_input)
-
-        # Hiển thị lỗi nếu có
-        if result["error"] and not result.get("used_fallback", False):
+ 
+        # ── Error / Fallback ──────────────────────────────────────────
+        if result.get("error") and not result.get("used_fallback", False):
             st.error(f"⚠️ {result['error']}")
         elif result.get("used_fallback", False):
-            st.info(
-                "💡 Đang dùng chế độ dự phòng do Ollama/LLM chưa phản hồi ổn định. "
-                "Bạn vẫn có thể xem các đoạn liên quan ở trên."
-            )
-
-    # Lưu vào history
-    st.session_state.chat_history.append(
-        {
-            "role": "assistant",
-            "content": result["answer"],
-            "sources": result.get("sources", []),
-            "question_ctx": user_input,  # lưu để highlight lại khi render history
-        }
-    )
-
-    # Rerun để cập nhật lịch sử hội thoại trong sidebar ngay lập tức
+            st.info("💡 Đang dùng chế độ dự phòng do Ollama chưa phản hồi ổn định.")
+ 
+    # Lưu vào history (kèm self_rag_meta để render lại khi scroll)
+    st.session_state.chat_history.append({
+        "role": "assistant",
+        "content": result["answer"],
+        "sources": result.get("sources", []),
+        "question_ctx": user_input,
+        "self_rag_meta": self_rag_meta,
+    })
+ 
     st.rerun()
 
 

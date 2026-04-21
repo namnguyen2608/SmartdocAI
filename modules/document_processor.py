@@ -9,7 +9,8 @@ import logging
 from datetime import date
 from typing import List, Optional
 
-from PyPDF2 import PdfReader
+# from PyPDF2 import PdfReader
+import pdfplumber
 from docx import Document as DocxDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -19,7 +20,6 @@ import config
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
-
 
 def extract_text_from_pdf(file_path: str, source_name: Optional[str] = None) -> List[Document]:
     """
@@ -44,24 +44,24 @@ def extract_text_from_pdf(file_path: str, source_name: Optional[str] = None) -> 
     file_name = source_name or os.path.basename(file_path)
 
     try:
-        reader = PdfReader(file_path)
-        total_pages = len(reader.pages)
-        logger.info(f"Đang đọc file PDF '{file_name}' - {total_pages} trang")
+        with pdfplumber.open(file_path) as pdf:
+            total_pages = len(pdf.pages)
+            logger.info(f"Đang đọc file PDF '{file_name}' - {total_pages} trang")
 
-        for page_num, page in enumerate(reader.pages):
-            text = page.extract_text()
-            if text and text.strip():
-                doc = Document(
-                    page_content=text.strip(),
-                    metadata={
-                        "source": file_name,
-                        "page": page_num + 1,
-                        "total_pages": total_pages,
-                        "file_type": "pdf",
-                        "upload_date": date.today().isoformat(),
-                    },
-                )
-                documents.append(doc)
+            for page_num, page in enumerate(pdf.pages):
+                text = page.extract_text()
+                if text and text.strip():
+                    doc = Document(
+                        page_content=text.strip(),
+                        metadata={
+                            "source": file_name,
+                            "page": page_num + 1,
+                            "total_pages": total_pages,
+                            "file_type": "pdf",
+                            "upload_date": date.today().isoformat(),
+                        },
+                    )
+                    documents.append(doc)
 
         if not documents:
             logger.warning(

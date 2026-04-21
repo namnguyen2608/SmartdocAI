@@ -218,6 +218,8 @@ def ask_question(
     question: str,
     vector_store=None,
     chat_history: Optional[list] = None,
+    retriever=None,
+    file_filter: Optional[list] = None,
 ) -> Dict[str, Any]:
     """
     Xß╗¡ l├╜ c├óu hß╗Åi cß╗ºa ng╞░ß╗¥i d├╣ng qua pipeline RAG.
@@ -278,7 +280,20 @@ def ask_question(
             # Pipeline RAG ─æß║ºy ─æß╗º
             # B╞░ß╗¢c 3.1: Viß║┐t lß║íi c├óu hß╗Åi nß║┐u l├á follow-up (Conversational RAG)
             search_question = _reformulate_question(question, chat_history, llm)
-            doc_score_pairs = similarity_search_with_scores(vector_store, search_question)
+
+            # Q7: dùng retriever tùy chỉnh nếu có (Hybrid Search)
+            if retriever is not None:
+                raw_docs = retriever.invoke(search_question)
+                doc_score_pairs = [(doc, 0.8) for doc in raw_docs]
+            else:
+                doc_score_pairs = similarity_search_with_scores(vector_store, search_question)
+
+            # Q8: lọc theo file nếu có filter
+            if file_filter:
+                doc_score_pairs = [
+                    (doc, score) for doc, score in doc_score_pairs
+                    if any(f in doc.metadata.get("source", "") for f in file_filter)
+                ]
             relevant_docs = [doc for doc, _ in doc_score_pairs]
             context = format_context(relevant_docs)
 
@@ -347,5 +362,6 @@ def ask_question(
                     "score": round(float(score), 3),
                 })
             result["sources"] = sources
-
+            result["search_mode"] = "hybrid" if retriever is not None else "vector"
+            result["active_filter"] = file_filter or []
     return result

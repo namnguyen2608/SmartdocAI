@@ -226,3 +226,53 @@ def clear_vector_store(index_name: Optional[str] = None) -> bool:
     except Exception as e:
         logger.error(f"Lỗi khi xóa vector store: {str(e)}")
         return False
+
+# ============================================================
+# Q7 — Hybrid Search (BM25 + Ensemble)
+# ============================================================
+
+# Cache BM25 retriever
+_bm25_retriever_cache = None
+
+def create_bm25_retriever(documents: List[Document], top_k: Optional[int] = None):
+    """Tạo BM25Retriever từ danh sách documents."""
+    global _bm25_retriever_cache
+    try:
+        from langchain_community.retrievers import BM25Retriever
+        _k = top_k or config.HYBRID_TOP_K
+        retriever = BM25Retriever.from_documents(documents)
+        retriever.k = _k
+        _bm25_retriever_cache = retriever
+        logger.info(f"Đã tạo BM25 retriever với {len(documents)} documents, k={_k}")
+        return retriever
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo BM25 retriever: {str(e)}")
+        return None
+
+
+def get_cached_bm25_retriever():
+    """Lấy BM25 retriever đã cache."""
+    return _bm25_retriever_cache
+
+
+def create_ensemble_retriever(vector_store: FAISS, bm25_retriever):
+    """Tạo EnsembleRetriever kết hợp FAISS và BM25."""
+    try:
+        from langchain.retrievers import EnsembleRetriever
+        faiss_retriever = vector_store.as_retriever(
+            search_type=config.RETRIEVAL_SEARCH_TYPE,
+            search_kwargs={
+                "k": config.HYBRID_TOP_K,
+                "fetch_k": config.RETRIEVAL_FETCH_K,
+                "lambda_mult": config.RETRIEVAL_LAMBDA_MULT,
+            },
+        )
+        ensemble = EnsembleRetriever(
+            retrievers=[faiss_retriever, bm25_retriever],
+            weights=[config.HYBRID_VECTOR_WEIGHT, config.HYBRID_BM25_WEIGHT],
+        )
+        logger.info("Đã tạo EnsembleRetriever (FAISS + BM25)")
+        return ensemble
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo EnsembleRetriever: {str(e)}")
+        return None
