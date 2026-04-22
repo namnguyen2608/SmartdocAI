@@ -32,7 +32,9 @@ from modules.vector_store import (
     create_ensemble_retriever,   # Q7
     get_cached_bm25_retriever,   # Q7
 )
-from modules.rag_chain import ask_question, check_ollama_connection
+from modules.rag_chain import ask_question, check_ollama_connection, get_llm
+from modules.reranker import rerank_with_cross_encoder
+from modules.self_rag import self_rag_pipeline
 
 # ============================================================
 # Cấu hình logging
@@ -62,7 +64,7 @@ st.markdown(
     /* ── Google Font ── */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-    /* ── CSS Variables ── */
+    /* ── CSS Variables — Dark Theme ── */
     :root {
         --bg-primary:    #0b0e14;
         --bg-secondary:  #111621;
@@ -103,7 +105,7 @@ st.markdown(
         color: var(--text-primary);
     }
     .main .block-container {
-        padding: 1.5rem 2rem 3rem 2rem;
+        padding: 1.5rem 2rem 8rem 2rem;
         max-width: 100%;
     }
     #MainMenu, footer, header { visibility: hidden; }
@@ -277,17 +279,17 @@ st.markdown(
         display: flex; flex-direction: column;
         align-items: center; justify-content: center;
         text-align: center;
-        padding: 4rem 2rem;
-        min-height: 55vh;
+        padding: 1.5rem 2rem 1rem;
+        min-height: calc(100vh - 380px);
     }
     .welcome-icon {
-        width: 80px; height: 80px;
-        border-radius: 24px;
+        width: 64px; height: 64px;
+        border-radius: 20px;
         background: linear-gradient(135deg, #6c8cff, #a78bfa);
         display: flex; align-items: center; justify-content: center;
-        font-size: 2.2rem;
-        box-shadow: 0 8px 32px rgba(108, 140, 255, 0.35);
-        margin-bottom: 24px;
+        font-size: 1.8rem;
+        box-shadow: 0 6px 24px rgba(108, 140, 255, 0.35);
+        margin-bottom: 14px;
         animation: float 3s ease-in-out infinite;
     }
     @keyframes float {
@@ -295,20 +297,20 @@ st.markdown(
         50% { transform: translateY(-8px); }
     }
     .welcome-hero h1 {
-        font-size: 1.8rem; font-weight: 800;
-        margin: 0 0 8px;
+        font-size: 1.5rem; font-weight: 800;
+        margin: 0 0 6px;
         background: linear-gradient(135deg, #e6eaf3, #9aa5bc);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         background-clip: text;
     }
     .welcome-hero p {
-        font-size: 0.95rem; color: var(--text-secondary);
-        max-width: 480px; line-height: 1.6;
-        margin: 0 0 32px;
+        font-size: 0.88rem; color: var(--text-secondary);
+        max-width: 480px; line-height: 1.5;
+        margin: 0 0 16px;
     }
     .welcome-steps {
-        display: flex; gap: 12px; flex-wrap: wrap;
-        justify-content: center; margin-bottom: 32px;
+        display: flex; gap: 8px; flex-wrap: wrap;
+        justify-content: center; margin-bottom: 16px;
     }
     .welcome-step {
         display: flex; align-items: center; gap: 8px;
@@ -385,7 +387,14 @@ st.markdown(
         font-size: 0.85rem; font-weight: 600;
     }
 
-    /* ── Chat Input ── */
+    /* ── stBottom: compact padding ── */
+    [data-testid="stBottom"] {
+        padding-top: 0 !important;
+        padding-bottom: 0.5rem !important;
+    }
+    [data-testid="stBottom"] > div {
+        padding-top: 0 !important;
+    }
     [data-testid="stChatInput"] {
         border-radius: var(--radius-lg) !important;
     }
@@ -438,7 +447,7 @@ st.markdown(
     .sidebar-divider {
         border: none;
         border-top: 1px solid var(--border-subtle);
-        margin: 16px 0;
+        margin: 8px 0;
     }
 
     /* ── Empty file list ── */
@@ -698,6 +707,7 @@ st.markdown(
         font-weight: 800;
         flex-shrink: 0;
     }
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -794,32 +804,6 @@ def render_sidebar():
         # ── Danh sách file ──
         st.markdown('<div class="section-header">📂 Tài liệu đã xử lý</div>', unsafe_allow_html=True)
         render_file_list()
-
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
-
-        # ── Q8: Metadata Filter ──
-        st.markdown('<div class="section-header">🔍 Lọc tài liệu (Q8)</div>', unsafe_allow_html=True)
-        render_metadata_filter()
-
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
-
-        # ── Q7: Hybrid Search ──
-        st.markdown('<div class="section-header">🔀 Hybrid Search (Q7)</div>', unsafe_allow_html=True)
-        render_hybrid_toggle()
-
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
-        st.markdown('<div class="section-header">🎯 Re-ranking (Q9)</div>', unsafe_allow_html=True)
-        render_reranker_toggle()
-
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
-        st.markdown('<div class="section-header">🧠 Self-RAG (Q10)</div>', unsafe_allow_html=True)
-        render_self_rag_toggle()
-
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
-
-        # ── Lịch sử hội thoại ──
-        st.markdown('<div class="section-header">💬 Lịch sử hội thoại</div>', unsafe_allow_html=True)
-        render_chat_history_sidebar()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
@@ -1445,6 +1429,20 @@ def render_main():
                     if sources:
                         render_sources(sources, question=question_ctx)
 
+    # Settings expander — đặt trên chat input, kiểu ChatGPT
+    with st.expander("⚙️ Cài đặt tìm kiếm", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown('<div class="section-header">🔍 Lọc tài liệu (Q8)</div>', unsafe_allow_html=True)
+            render_metadata_filter()
+            st.markdown('<div class="section-header">🔀 Hybrid Search (Q7)</div>', unsafe_allow_html=True)
+            render_hybrid_toggle()
+        with col2:
+            st.markdown('<div class="section-header">🎯 Re-ranking (Q9)</div>', unsafe_allow_html=True)
+            render_reranker_toggle()
+            st.markdown('<div class="section-header">🧠 Self-RAG (Q10)</div>', unsafe_allow_html=True)
+            render_self_rag_toggle()
+
     # Chat input
     if prompt := st.chat_input(
         "Nhập câu hỏi của bạn... (ví dụ: Tóm tắt tài liệu, Trích xuất thông tin quan trọng)",
@@ -1503,7 +1501,6 @@ def render_welcome():
         )
 
     # Suggested questions
-    st.markdown("")  # spacer
     example_cols = st.columns(2, gap="small")
     examples = [
         ("📝", "Tóm tắt nội dung chính của tài liệu"),
@@ -1666,8 +1663,8 @@ def handle_user_input(user_input: str):
                     st.session_state.reranker_enabled
                     and st.session_state.vector_store is not None
                 ):
-                    doc_score_pairs = similarity_search_with_scores(
-                        st.session_state.vector_store, user_input
+                    doc_score_pairs = st.session_state.vector_store.similarity_search_with_score(
+                        user_input
                     )
                     if doc_score_pairs:
                         reranked = rerank_with_cross_encoder(user_input, doc_score_pairs, top_k=3)

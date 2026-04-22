@@ -42,8 +42,8 @@ CHUNK_OVERLAP = 200
 # Cấu hình Retrieval
 # ============================================================
 RETRIEVAL_SEARCH_TYPE = "mmr"
-RETRIEVAL_TOP_K = 3       
-RETRIEVAL_FETCH_K = 30
+RETRIEVAL_TOP_K = 8
+RETRIEVAL_FETCH_K = 50
 RETRIEVAL_LAMBDA_MULT = 0.7     
 
 # ============================================================

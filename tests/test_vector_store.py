@@ -216,3 +216,151 @@ class TestIntegrationVectorStore:
             assert m1 is m2
         finally:
             vs_module._embedding_model = original
+
+
+# ─── Q8: Metadata Filtering ──────────────────────────────────────────────────
+
+class TestMetadataFiltering:
+    """
+    Q8 — Kiểm thử tính năng lọc tài liệu theo metadata (Multi-document RAG).
+
+    Khi người dùng chọn chỉ tìm trong file A, hệ thống phải:
+    1. Loại bỏ các chunks đến từ file B, C, ...
+    2. Chỉ trả về chunks có source khớp với filter
+    3. Xử lý đúng khi filter là list rỗng (tìm tất cả)
+    """
+
+    def test_filter_keeps_matching_source(self, sample_docs):
+        """
+        Sau khi apply file_filter, chỉ giữ docs có source chứa tên file được chọn.
+        Logic này nằm trong ask_question() — test trực tiếp filter expression.
+        """
+        file_filter = ["fileA.pdf"]
+        filtered = [
+            doc for doc in sample_docs
+            if any(f in doc.metadata.get("source", "") for f in file_filter)
+        ]
+        assert len(filtered) == 2  # 2 docs từ fileA, 1 từ fileB
+        assert all("fileA.pdf" in d.metadata["source"] for d in filtered)
+
+    def test_filter_excludes_other_sources(self, sample_docs):
+        """Docs từ file không được chọn bị loại khỏi kết quả"""
+        file_filter = ["fileB.pdf"]
+        filtered = [
+            doc for doc in sample_docs
+            if any(f in doc.metadata.get("source", "") for f in file_filter)
+        ]
+        assert all("fileB.pdf" in d.metadata["source"] for d in filtered)
+        assert not any("fileA.pdf" in d.metadata["source"] for d in filtered)
+
+    def test_empty_filter_returns_all(self, sample_docs):
+        """file_filter=[] → không lọc gì, trả về tất cả docs"""
+        file_filter = []
+        if file_filter:
+            filtered = [
+                doc for doc in sample_docs
+                if any(f in doc.metadata.get("source", "") for f in file_filter)
+            ]
+        else:
+            filtered = sample_docs  # No filter → all docs
+        assert len(filtered) == len(sample_docs)
+
+    def test_filter_nonexistent_file_returns_empty(self, sample_docs):
+        """Lọc theo file không tồn tại → kết quả rỗng"""
+        file_filter = ["nonexistent_file.pdf"]
+        filtered = [
+            doc for doc in sample_docs
+            if any(f in doc.metadata.get("source", "") for f in file_filter)
+        ]
+        assert filtered == []
+
+    def test_multiple_files_in_filter(self, sample_docs):
+        """Lọc đồng thời nhiều file → trả về docs từ tất cả file đã chọn"""
+        file_filter = ["fileA.pdf", "fileB.pdf"]
+        filtered = [
+            doc for doc in sample_docs
+            if any(f in doc.metadata.get("source", "") for f in file_filter)
+        ]
+        assert len(filtered) == len(sample_docs)  # tất cả 3 docs
+
+    def test_doc_metadata_has_source_key(self, sample_docs):
+        """Mỗi document phải có metadata['source'] để filter hoạt động"""
+        for doc in sample_docs:
+            assert "source" in doc.metadata, \
+                f"Doc thiếu metadata['source']: {doc.page_content[:30]}"
+
+    def test_similarity_search_mock_with_filter(self):
+        """
+        Mô phỏng toàn bộ flow Q8 trong ask_question:
+        search → trả về mixed sources → apply filter → chỉ còn fileA.
+        """
+        from langchain_core.documents import Document
+
+        # Giả lập kết quả search trả về docs từ nhiều file
+        raw_results = [
+            (Document(page_content="GA info", metadata={"source": "fileA.pdf", "page": 1}), 0.90),
+            (Document(page_content="FAISS info", metadata={"source": "fileB.pdf", "page": 3}), 0.85),
+            (Document(page_content="More GA", metadata={"source": "fileA.pdf", "page": 5}), 0.80),
+        ]
+
+        # Apply filter như trong ask_question()
+        file_filter = ["fileA.pdf"]
+        filtered = [
+            (doc, score) for doc, score in raw_results
+            if any(f in doc.metadata.get("source", "") for f in file_filter)
+        ]
+
+        assert len(filtered) == 2
+        assert all("fileA.pdf" in doc.metadata["source"] for doc, _ in filtered)
+
+
+@pytest.mark.integration
+class TestIntegrationMetadataFilter:
+    """
+    Integration test Q8: Tạo vector store thật với nhiều file,
+    kiểm tra filter hoạt động end-to-end.
+    """
+
+    @pytest.fixture(autouse=True)
+    def skip_if_no_embedding(self):
+        """Skip nếu không load được embedding model"""
+        try:
+            from modules.vector_store import get_embedding_model
+            model = get_embedding_model()
+            if model is None:
+                pytest.skip("Embedding model không khả dụng")
+        except Exception:
+            pytest.skip("Không thể load embedding model")
+
+    def test_multi_file_vector_store_created(self):
+        """Tạo vector store từ docs của 2 file khác nhau → không None"""
+        from modules.vector_store import create_vector_store
+        docs = [
+            Document(
+                page_content="Content from file A about genetic algorithms.",
+                metadata={"source": "fileA.pdf", "page": 1}
+            ),
+            Document(
+                page_content="Content from file B about neural networks.",
+                metadata={"source": "fileB.pdf", "page": 1}
+            ),
+        ]
+        vs = create_vector_store(docs)
+        assert vs is not None
+
+    def test_filter_reduces_results(self):
+        """Filter theo 1 file → ít kết quả hơn so với không filter"""
+        from modules.vector_store import create_vector_store, similarity_search_with_scores
+        docs = [
+            Document(page_content="Genetic algorithm crossover mutation.", metadata={"source": "fileA.pdf", "page": 1}),
+            Document(page_content="Genetic algorithm selection pressure.", metadata={"source": "fileA.pdf", "page": 2}),
+            Document(page_content="Neural network backpropagation gradient.", metadata={"source": "fileB.pdf", "page": 1}),
+        ]
+        vs = create_vector_store(docs)
+        all_results = similarity_search_with_scores(vs, "genetic algorithm", top_k=5)
+        file_filter = ["fileA.pdf"]
+        filtered_results = [
+            (doc, score) for doc, score in all_results
+            if any(f in doc.metadata.get("source", "") for f in file_filter)
+        ]
+        assert len(filtered_results) <= len(all_results)

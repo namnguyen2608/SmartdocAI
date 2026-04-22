@@ -412,6 +412,9 @@ def self_rag_pipeline(
         def clean_source(s):
             return _os.path.basename(str(s or "N/A"))
 
+        # Build score lookup từ all_doc_score_pairs (key = 100 ký tự đầu content)
+        score_map = {doc.page_content[:100]: score for doc, score in all_doc_score_pairs}
+
         seen_keys = set()
         sources = []
         for idx, doc in enumerate(filtered_docs[:top_k]):
@@ -428,7 +431,7 @@ def self_rag_pipeline(
                 "file_type": doc.metadata.get("file_type", "pdf"),
                 "content": doc.page_content,
                 "chunk_index": idx + 1,
-                "score": 0.0,
+                "score": score_map.get(doc.page_content[:100], 0.0),
             })
         result["sources"] = sources
 

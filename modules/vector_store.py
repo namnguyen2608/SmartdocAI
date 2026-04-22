@@ -258,7 +258,7 @@ def get_cached_bm25_retriever():
 def create_ensemble_retriever(vector_store: FAISS, bm25_retriever):
     """Tạo EnsembleRetriever kết hợp FAISS và BM25."""
     try:
-        from langchain.retrievers import EnsembleRetriever
+        from langchain_classic.retrievers import EnsembleRetriever
         faiss_retriever = vector_store.as_retriever(
             search_type=config.RETRIEVAL_SEARCH_TYPE,
             search_kwargs={
