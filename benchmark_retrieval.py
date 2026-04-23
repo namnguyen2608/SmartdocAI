@@ -103,6 +103,8 @@ def get_or_build_faiss(n_chunks: int, embeddings):
 # ─── Hàm đo latency ──────────────────────────────────────────────────────────
 def measure_latency_ms(retriever, query: str, runs: int) -> float:
     """Đo thời gian trung bình (ms) của retriever trên một query, chạy `runs` lần."""
+    # Warmup: 1 lần chạy không tính để loại bỏ cold-start artifact
+    retriever.invoke(query)
     times = []
     for _ in range(runs):
         t0 = time.perf_counter()
@@ -110,6 +112,9 @@ def measure_latency_ms(retriever, query: str, runs: int) -> float:
         t1 = time.perf_counter()
         times.append((t1 - t0) * 1000)
     return round(sum(times) / len(times), 2)
+
+
+
 
 
 def avg_over_queries(retriever, queries: list, runs: int) -> float:
@@ -133,37 +138,59 @@ def main():
     )
     print("✓ Đã tải embedding model.\n")
 
+    # Warmup toàn bộ pipeline: chạy 1 lần dummy để loại cold-start
+    print("Đang warmup pipeline...")
+    _dummy_docs = [Document(page_content="warmup", metadata={})]
+    _dummy_vs = FAISS.from_documents(_dummy_docs, embeddings)
+    _dummy_ret = _dummy_vs.as_retriever(search_kwargs={"k": 1})
+    _dummy_ret.invoke("warmup query")
+    print("✓ Warmup xong.\n")
+
+    NUM_PASSES = 10  # chạy 10 lần lấy average để ổn định số liệu
+    all_passes = []
+
+    for pass_num in range(1, NUM_PASSES + 1):
+        print(f"════ PASS {pass_num}/{NUM_PASSES} ════")
+        pass_results = []
+
+        for n_chunks in CHUNK_SIZES:
+            print(f"  ─── {n_chunks} chunks ───")
+
+            vs, docs = get_or_build_faiss(n_chunks, embeddings)
+
+            faiss_retriever = vs.as_retriever(
+                search_type="mmr",
+                search_kwargs={"k": HYBRID_TOP_K, "fetch_k": 30, "lambda_mult": 0.7},
+            )
+            faiss_ms = avg_over_queries(faiss_retriever, QUERIES, NUM_RUNS)
+            print(f"    FAISS  : {faiss_ms:7.2f} ms")
+
+            bm25_retriever = BM25Retriever.from_documents(docs)
+            bm25_retriever.k = HYBRID_TOP_K
+            bm25_ms = avg_over_queries(bm25_retriever, QUERIES, NUM_RUNS)
+            print(f"    BM25   : {bm25_ms:7.2f} ms")
+
+            ensemble = EnsembleRetriever(
+                retrievers=[faiss_retriever, bm25_retriever],
+                weights=[VECTOR_WEIGHT, BM25_WEIGHT],
+            )
+            hybrid_ms = avg_over_queries(ensemble, QUERIES, NUM_RUNS)
+            print(f"    Hybrid : {hybrid_ms:7.2f} ms")
+
+            pass_results.append((n_chunks, faiss_ms, bm25_ms, hybrid_ms))
+
+        all_passes.append(pass_results)
+        print()
+
+    # Average qua các passes
     results = []
+    for i, n_chunks in enumerate(CHUNK_SIZES):
+        f_avg = round(sum(p[i][1] for p in all_passes) / NUM_PASSES, 2)
+        b_avg = round(sum(p[i][2] for p in all_passes) / NUM_PASSES, 2)
+        h_avg = round(sum(p[i][3] for p in all_passes) / NUM_PASSES, 2)
+        results.append((n_chunks, f_avg, b_avg, h_avg))
 
-    for n_chunks in CHUNK_SIZES:
-        print(f"─── {n_chunks} chunks ─────────────────────────────────────")
-
-        # Tạo dữ liệu / load từ cache
-        vs, docs = get_or_build_faiss(n_chunks, embeddings)
-
-        # ── FAISS ──────────────────────────────────────────────────────────
-        faiss_retriever = vs.as_retriever(
-            search_type="mmr",
-            search_kwargs={"k": HYBRID_TOP_K, "fetch_k": 30, "lambda_mult": 0.7},
-        )
-        faiss_ms = avg_over_queries(faiss_retriever, QUERIES, NUM_RUNS)
-        print(f"  FAISS  : {faiss_ms:7.2f} ms")
-
-        # ── BM25 ───────────────────────────────────────────────────────────
-        bm25_retriever = BM25Retriever.from_documents(docs)
-        bm25_retriever.k = HYBRID_TOP_K
-        bm25_ms = avg_over_queries(bm25_retriever, QUERIES, NUM_RUNS)
-        print(f"  BM25   : {bm25_ms:7.2f} ms")
-
-        # ── Hybrid Ensemble ────────────────────────────────────────────────
-        ensemble = EnsembleRetriever(
-            retrievers=[faiss_retriever, bm25_retriever],
-            weights=[VECTOR_WEIGHT, BM25_WEIGHT],
-        )
-        hybrid_ms = avg_over_queries(ensemble, QUERIES, NUM_RUNS)
-        print(f"  Hybrid : {hybrid_ms:7.2f} ms\n")
-
-        results.append((n_chunks, faiss_ms, bm25_ms, hybrid_ms))
+    print(f"\n(Kết quả sau khi average qua {NUM_PASSES} passes)")
 
     # ─── In bảng kết quả ──────────────────────────────────────────────────────
     print("\n" + "=" * 60)
