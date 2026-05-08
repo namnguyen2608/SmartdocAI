@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 st.set_page_config(
     page_title="SmartDocAI — Trợ lý Tài liệu Thông minh",
-    page_icon="🧠",
+    page_icon="S",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -61,62 +61,63 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    /* ── Google Font ── */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    /* ── Google Fonts — Clean Design System ── */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;800&family=Inconsolata:wght@400;600&display=swap');
 
-    /* ── CSS Variables — Dark Theme ── */
+    /* ── CSS Variables — Clean Light Theme ── */
     :root {
-        --bg-primary:    #0b0e14;
-        --bg-secondary:  #111621;
-        --bg-surface:    #161b27;
-        --bg-elevated:   #1c2333;
-        --bg-hover:      #222b3d;
-        --border-subtle: #252e41;
-        --border-default:#2d3751;
-        --text-primary:  #e6eaf3;
-        --text-secondary:#9aa5bc;
-        --text-muted:    #6b7894;
-        --accent:        #6c8cff;
-        --accent-hover:  #8ba2ff;
-        --accent-soft:   rgba(108, 140, 255, 0.12);
-        --accent-border: rgba(108, 140, 255, 0.30);
-        --success:       #4ecb8d;
-        --success-soft:  rgba(78, 203, 141, 0.12);
-        --success-border:rgba(78, 203, 141, 0.30);
-        --error:         #f06e6e;
-        --error-soft:    rgba(240, 110, 110, 0.12);
-        --error-border:  rgba(240, 110, 110, 0.30);
-        --warning:       #f0b44e;
-        --warning-soft:  rgba(240, 180, 78, 0.12);
-        --radius-sm:     8px;
-        --radius-md:     12px;
-        --radius-lg:     16px;
-        --radius-xl:     20px;
-        --shadow-sm:     0 2px 8px rgba(0,0,0,0.18);
-        --shadow-md:     0 4px 20px rgba(0,0,0,0.25);
-        --shadow-lg:     0 8px 40px rgba(0,0,0,0.35);
-        --transition:    all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        --bg-primary:    #FFFFFF;
+        --bg-secondary:  #F9FAFB;
+        --bg-surface:    #F3F4F6;
+        --bg-elevated:   #FFFFFF;
+        --bg-hover:      #F3F4F6;
+        --border-subtle: #E5E7EB;
+        --border-default:#D1D5DB;
+        --text-primary:  #111827;
+        --text-secondary:#4B5563;
+        --text-muted:    #9CA3AF;
+        --accent:        #3B82F6;
+        --accent-hover:  #2563EB;
+        --accent-soft:   rgba(59, 130, 246, 0.08);
+        --accent-border: rgba(59, 130, 246, 0.20);
+        --success:       #16A34A;
+        --success-soft:  rgba(22, 163, 74, 0.08);
+        --success-border:rgba(22, 163, 74, 0.20);
+        --error:         #DC2626;
+        --error-soft:    rgba(220, 38, 38, 0.08);
+        --error-border:  rgba(220, 38, 38, 0.20);
+        --warning:       #D97706;
+        --warning-soft:  rgba(217, 119, 6, 0.08);
+        --radius-sm:     6px;
+        --radius-md:     8px;
+        --radius-lg:     12px;
+        --radius-xl:     16px;
+        --shadow-sm:     0 1px 2px rgba(0,0,0,0.05);
+        --shadow-md:     0 2px 8px rgba(0,0,0,0.08);
+        --shadow-lg:     0 4px 16px rgba(0,0,0,0.10);
+        --transition:    all 0.2s ease;
     }
 
     /* ── Global ── */
     .stApp {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
         background: var(--bg-primary);
         color: var(--text-primary);
     }
     .main .block-container {
-        padding: 1.5rem 2rem 8rem 2rem;
+        padding: 2rem 2.5rem 8rem 2.5rem;
         max-width: 100%;
     }
-    #MainMenu, footer, header { visibility: hidden; }
+    #MainMenu, footer { visibility: hidden; }
+    header { background: transparent !important; }
 
     /* ── Sidebar ── */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #111621 0%, #0d1018 100%) !important;
+        background: var(--bg-secondary) !important;
         border-right: 1px solid var(--border-subtle) !important;
     }
     [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-        padding: 1.2rem 1rem;
+        padding: 1.5rem 1.25rem;
     }
 
     /* ── Sidebar Brand ── */
@@ -125,25 +126,28 @@ st.markdown(
         align-items: center;
         gap: 12px;
         padding: 14px 16px;
-        background: linear-gradient(135deg, rgba(108,140,255,0.10) 0%, rgba(108,140,255,0.03) 100%);
+        background: var(--accent-soft);
         border: 1px solid var(--accent-border);
         border-radius: var(--radius-lg);
         margin-bottom: 20px;
     }
     .sidebar-brand .brand-icon {
-        width: 42px; height: 42px;
+        width: 40px; height: 40px;
         border-radius: var(--radius-md);
-        background: linear-gradient(135deg, #6c8cff, #a78bfa);
+        background: var(--accent);
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.3rem;
-        box-shadow: 0 4px 16px rgba(108, 140, 255, 0.30);
+        font-size: 1rem;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 700;
+        color: #FFFFFF;
     }
     .sidebar-brand .brand-text h3 {
-        margin: 0; font-size: 1.05rem; font-weight: 700;
+        margin: 0; font-size: 1rem; font-weight: 700;
+        font-family: 'Poppins', sans-serif;
         color: var(--text-primary); line-height: 1.2;
     }
     .sidebar-brand .brand-text p {
-        margin: 2px 0 0; font-size: 0.73rem;
+        margin: 2px 0 0; font-size: 0.75rem;
         color: var(--text-muted); line-height: 1.3;
     }
 
@@ -163,8 +167,7 @@ st.markdown(
     .status-online .dot {
         width: 8px; height: 8px; border-radius: 50%;
         background: var(--success);
-        box-shadow: 0 0 8px var(--success);
-        animation: pulse-dot 2s infinite;
+        box-shadow: 0 0 6px var(--success);
     }
     .status-offline {
         background: var(--error-soft);
@@ -176,10 +179,7 @@ st.markdown(
         background: var(--error);
     }
 
-    @keyframes pulse-dot {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.5; transform: scale(1.3); }
-    }
+
 
     /* ── Section Headers ── */
     .section-header {
@@ -233,7 +233,7 @@ st.markdown(
     .file-card .file-icon {
         width: 34px; height: 34px;
         border-radius: var(--radius-sm);
-        background: linear-gradient(135deg, rgba(108,140,255,0.15), rgba(167,139,250,0.15));
+        background: var(--accent-soft);
         display: flex; align-items: center; justify-content: center;
         font-size: 0.9rem; flex-shrink: 0;
     }
@@ -270,8 +270,8 @@ st.markdown(
 
     /* ── Progress Bar ── */
     [data-testid="stProgress"] > div > div {
-        background: linear-gradient(90deg, #6c8cff, #a78bfa) !important;
-        border-radius: 999px !important;
+        background: var(--accent) !important;
+        border-radius: 5px !important;
     }
 
     /* ── Welcome Hero ── */
@@ -285,23 +285,17 @@ st.markdown(
     .welcome-icon {
         width: 64px; height: 64px;
         border-radius: 20px;
-        background: linear-gradient(135deg, #6c8cff, #a78bfa);
+        background: var(--accent);
         display: flex; align-items: center; justify-content: center;
         font-size: 1.8rem;
-        box-shadow: 0 6px 24px rgba(108, 140, 255, 0.35);
         margin-bottom: 14px;
-        animation: float 3s ease-in-out infinite;
     }
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-8px); }
-    }
+
     .welcome-hero h1 {
-        font-size: 1.5rem; font-weight: 800;
+        font-size: 1.5rem; font-weight: 700;
+        font-family: 'Poppins', sans-serif;
         margin: 0 0 6px;
-        background: linear-gradient(135deg, #e6eaf3, #9aa5bc);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--text-primary);
     }
     .welcome-hero p {
         font-size: 0.88rem; color: var(--text-secondary);
@@ -396,18 +390,21 @@ st.markdown(
         padding-top: 0 !important;
     }
     [data-testid="stChatInput"] {
-        border-radius: var(--radius-lg) !important;
+        border-radius: px !important;
+        border: 1px solid var(--border-subtle) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+        background: var(--bg-elevated) !important;
     }
     [data-testid="stChatInput"] textarea {
-        background: var(--bg-elevated) !important;
-        border: 1px solid var(--border-default) !important;
-        border-radius: var(--radius-md) !important;
+        background: transparent !important;
+        border: none !important;
         color: var(--text-primary) !important;
-        font-family: 'Inter', sans-serif !important;
+        font-family: 'Roboto', sans-serif !important;
+        box-shadow: none !important;
     }
     [data-testid="stChatInput"] textarea:focus {
-        border-color: var(--accent) !important;
-        box-shadow: 0 0 0 2px var(--accent-soft) !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 
     /* ── Buttons ── */
@@ -416,7 +413,7 @@ st.markdown(
         border-radius: var(--radius-md) !important;
         background: var(--bg-elevated) !important;
         color: var(--text-primary) !important;
-        font-family: 'Inter', sans-serif !important;
+        font-family: 'Roboto', sans-serif !important;
         font-weight: 600 !important;
         font-size: 0.82rem !important;
         transition: var(--transition) !important;
@@ -428,13 +425,13 @@ st.markdown(
         color: var(--accent-hover) !important;
     }
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #6c8cff, #8b6cff) !important;
+        background: var(--accent) !important;
         border: none !important;
         color: #fff !important;
     }
     .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #8ba2ff, #a78bfa) !important;
-        box-shadow: 0 4px 16px rgba(108, 140, 255, 0.35) !important;
+        background: var(--accent-hover) !important;
+        box-shadow: var(--shadow-md) !important;
     }
 
     /* ── Toggle ── */
@@ -594,7 +591,7 @@ st.markdown(
         position: absolute;
         left: 0; top: 0; bottom: 0;
         width: 3px;
-        background: linear-gradient(180deg, #6c8cff, #a78bfa);
+        background: var(--accent);
         border-radius: 999px 0 0 999px;
     }
     .citation-card:hover {
@@ -665,7 +662,7 @@ st.markdown(
     .citation-score-bar-fill {
         height: 100%;
         border-radius: 999px;
-        background: linear-gradient(90deg, #6c8cff, #a78bfa);
+        background: var(--accent);
         transition: width 0.5s ease;
     }
     .citation-score-value {
@@ -689,8 +686,8 @@ st.markdown(
         word-break: break-word;
     }
     .citation-content mark {
-        background: rgba(240, 200, 80, 0.28);
-        color: #f0d050;
+        background: rgba(59, 130, 246, 0.15);
+        color: var(--accent-hover);
         border-radius: 3px;
         padding: 1px 2px;
         font-weight: 600;
@@ -757,7 +754,7 @@ def render_sidebar():
         st.markdown(
             """
             <div class="sidebar-brand">
-                <div class="brand-icon">🧠</div>
+                <div class="brand-icon">S</div>
                 <div class="brand-text">
                     <h3>SmartDocAI</h3>
                     <p>Trợ lý Tài liệu Thông minh</p>
@@ -796,19 +793,19 @@ def render_sidebar():
         )
 
         # ── Upload ──
-        st.markdown('<div class="section-header">📤 Tải tài liệu lên</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Tải tài liệu lên</div>', unsafe_allow_html=True)
         render_upload_section()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
         # ── Danh sách file ──
-        st.markdown('<div class="section-header">📂 Tài liệu đã xử lý</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Tài liệu đã xử lý</div>', unsafe_allow_html=True)
         render_file_list()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
         # ── Actions ──
-        st.markdown('<div class="section-header">⚙️ Thao tác</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Thao tác</div>', unsafe_allow_html=True)
         render_action_buttons()
 
 
@@ -840,13 +837,13 @@ def render_system_status():
             unsafe_allow_html=True,
         )
         st.warning(
-            f"⚠️ Không thể kết nối tới Ollama!\n\n"
+            f"Không thể kết nối tới Ollama!\n\n"
             f"1. Cài đặt Ollama: https://ollama.com\n"
             f"2. Chạy: `ollama pull {config.OLLAMA_MODEL}`\n"
             f"3. Đảm bảo Ollama đang chạy trên cổng 11434"
         )
 
-    if st.button("🔄 Kiểm tra kết nối", key="recheck_ollama", use_container_width=True):
+    if st.button("Kiểm tra kết nối", key="recheck_ollama", use_container_width=True):
         st.session_state.ollama_status = check_ollama_connection()
         st.rerun()
 
@@ -860,7 +857,7 @@ def render_upload_section():
         key="file_uploader",
         help="Kéo-thả hoặc nhấn để chọn nhiều file PDF / DOCX cùng lúc.",
     )
-    st.caption("📎 Hỗ trợ kéo-thả nhiều file PDF & DOCX cùng lúc")
+    st.caption("Hỗ trợ kéo-thả nhiều file PDF & DOCX cùng lúc")
 
     # Toggle auto-process
     st.toggle(
@@ -887,7 +884,7 @@ def render_upload_section():
                 size_str = f"{file_size / 1024:.0f} KB"
             else:
                 size_str = f"{file_size / (1024 * 1024):.1f} MB"
-            file_icon = "📝" if uf.name.lower().endswith(".docx") else "📄"
+            file_icon = "DOCX" if uf.name.lower().endswith(".docx") else "PDF"
 
             st.markdown(
                 f"""
@@ -904,7 +901,7 @@ def render_upload_section():
             )
 
         # Nút xử lý thủ công
-        btn_label = "⏳ Đang xử lý..." if st.session_state.is_processing else "🚀 Xử lý tài liệu"
+        btn_label = "Đang xử lý..." if st.session_state.is_processing else "Xử lý tài liệu"
         already_processed = (
             upload_signature == st.session_state.last_processed_upload_signature
         )
@@ -935,7 +932,7 @@ def render_file_list():
         st.markdown(
             """
             <div class="empty-files">
-                📭 Chưa có tài liệu nào được xử lý.<br>
+                Chưa có tài liệu nào được xử lý.<br>
                 Hãy tải file PDF hoặc DOCX lên ở phía trên.
             </div>
             """,
@@ -946,7 +943,7 @@ def render_file_list():
     for f in st.session_state.processed_files[::-1]:
         pages = f.get("pages", "?")
         chunks = f.get("chunks", "?")
-        file_icon = "📝" if f["name"].lower().endswith(".docx") else "📄"
+        file_icon = "DOCX" if f["name"].lower().endswith(".docx") else "PDF"
         st.markdown(
             f"""
             <div class="file-card">
@@ -986,7 +983,7 @@ def render_chat_history_sidebar():
         st.markdown(
             """
             <div class="empty-history">
-                💭 Chưa có cuộc hội thoại nào.<br>
+                Chưa có cuộc hội thoại nào.<br>
                 Hãy đặt câu hỏi để bắt đầu.
             </div>
             """,
@@ -995,7 +992,7 @@ def render_chat_history_sidebar():
         return
 
     # Hiển thị danh sách câu hỏi (mới nhất lên đầu)
-    st.caption(f"📋 {len(qa_pairs)} câu hỏi đã được hỏi")
+    st.caption(f"{len(qa_pairs)} câu hỏi đã được hỏi")
 
     for idx, pair in enumerate(reversed(qa_pairs)):
         q_display = pair["question"]
@@ -1006,28 +1003,28 @@ def render_chat_history_sidebar():
         q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
         a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
         st.markdown(
-            f"""<div class="history-item"><div class="history-question">❓ {q_display}</div><div class="history-answer-preview">💡 {a_preview}</div></div>""",
+            f"""<div class="history-item"><div class="history-question">{q_display}</div><div class="history-answer-preview">{a_preview}</div></div>""",
             unsafe_allow_html=True,
         )
 
     # Expander để xem chi tiết từng câu hỏi
-    with st.expander("🔎 Xem chi tiết câu hỏi đã hỏi", expanded=False):
+    with st.expander("Xem chi tiết câu hỏi đã hỏi", expanded=False):
         for idx, pair in enumerate(reversed(qa_pairs)):
-            st.markdown(f"**❓ Câu hỏi {len(qa_pairs) - idx}:**")
+            st.markdown(f"**Câu hỏi {len(qa_pairs) - idx}:**")
             st.markdown(f"> {pair['question']}")
-            st.markdown(f"**💡 Câu trả lời:**")
+            st.markdown(f"**Câu trả lời:**")
             st.markdown(pair["answer"][:500] + ("..." if len(pair["answer"]) > 500 else ""))
             if idx < len(qa_pairs) - 1:
                 st.markdown("---")
 
 
-@st.dialog("⚠️ Xác nhận xóa lịch sử")
+@st.dialog("Xác nhận xóa lịch sử")
 def confirm_clear_history_dialog():
     """Dialog xác nhận xóa lịch sử chat — hiển thị ở giữa màn hình."""
     st.markdown(
         """
         <div class="confirm-dialog">
-            <div class="confirm-title">⚠️ Xác nhận xóa lịch sử</div>
+            <div class="confirm-title">Xác nhận xóa lịch sử</div>
             <div class="confirm-message">
                 Bạn có chắc chắn muốn xóa <strong>toàn bộ lịch sử chat</strong>?
                 Hành động này không thể hoàn tác.
@@ -1038,21 +1035,21 @@ def confirm_clear_history_dialog():
     )
     confirm_col1, confirm_col2 = st.columns(2)
     with confirm_col1:
-        if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
+        if st.button("Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
             st.session_state.chat_history = []
             st.rerun()
     with confirm_col2:
-        if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
+        if st.button("Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
             st.rerun()
 
 
-@st.dialog("⚠️ Xác nhận xóa tài liệu")
+@st.dialog("Xác nhận xóa tài liệu")
 def confirm_clear_vectorstore_dialog():
     """Dialog xác nhận xóa vector store — hiển thị ở giữa màn hình."""
     st.markdown(
         """
         <div class="confirm-dialog">
-            <div class="confirm-title">⚠️ Xác nhận xóa tài liệu</div>
+            <div class="confirm-title">Xác nhận xóa tài liệu</div>
             <div class="confirm-message">
                 Bạn có chắc chắn muốn xóa <strong>toàn bộ tài liệu đã upload</strong>
                 và vector store? Hành động này không thể hoàn tác.
@@ -1063,7 +1060,7 @@ def confirm_clear_vectorstore_dialog():
     )
     confirm_col1, confirm_col2 = st.columns(2)
     with confirm_col1:
-        if st.button("✅ Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
+        if st.button("Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
             clear_vector_store()
             st.session_state.vector_store = None
             st.session_state.processed_files = []
@@ -1073,7 +1070,7 @@ def confirm_clear_vectorstore_dialog():
             st.session_state.active_file_filter = []   # Q8: reset filter
             st.rerun()
     with confirm_col2:
-        if st.button("❌ Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
+        if st.button("Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
             st.rerun()
 
 
@@ -1085,7 +1082,7 @@ def render_metadata_filter():
     files = st.session_state.processed_files
     if not files:
         st.markdown(
-            '<div class="empty-files">📭 Chưa có tài liệu nào để lọc.</div>',
+            '<div class="empty-files">Chưa có tài liệu nào để lọc.</div>',
             unsafe_allow_html=True,
         )
         return
@@ -1102,9 +1099,9 @@ def render_metadata_filter():
     st.session_state.active_file_filter = selected
 
     if selected:
-        st.caption(f"🔒 Đang lọc: {len(selected)}/{len(file_names)} file")
+        st.caption(f"Đang lọc: {len(selected)}/{len(file_names)} file")
     else:
-        st.caption("🌐 Tìm kiếm toàn bộ tài liệu")
+        st.caption("Tìm kiếm toàn bộ tài liệu")
 
 
 def render_hybrid_toggle():
@@ -1127,15 +1124,15 @@ def render_hybrid_toggle():
     st.session_state.hybrid_enabled = hybrid_on
 
     if not has_docs:
-        st.caption("⚠️ Tải tài liệu lên để kích hoạt Hybrid Search")
+        st.caption("Tải tài liệu lên để kích hoạt Hybrid Search")
     elif hybrid_on:
         import config as _cfg
         st.caption(
-            f"⚡ Đang dùng: Vector {int(_cfg.HYBRID_VECTOR_WEIGHT*100)}% "
+            f"Đang dùng: Vector {int(_cfg.HYBRID_VECTOR_WEIGHT*100)}% "
             f"+ BM25 {int(_cfg.HYBRID_BM25_WEIGHT*100)}%"
         )
     else:
-        st.caption("🔵 Đang dùng: Pure Vector Search (FAISS)")
+        st.caption("Đang dùng: Pure Vector Search (FAISS)")
 
 
 def render_reranker_toggle():
@@ -1153,11 +1150,11 @@ def render_reranker_toggle():
     )
     st.session_state.reranker_enabled = reranker_on
     if not has_docs:
-        st.caption("⚠️ Tải tài liệu để kích hoạt Re-ranking")
+        st.caption("Tải tài liệu để kích hoạt Re-ranking")
     elif reranker_on:
-        st.caption("🎯 Cross-Encoder: ms-marco-MiniLM-L-6-v2")
+        st.caption("Cross-Encoder: ms-marco-MiniLM-L-6-v2")
     else:
-        st.caption("🔵 Dùng Bi-Encoder scores (FAISS)")
+        st.caption("Dùng Bi-Encoder scores (FAISS)")
 
 
 def render_self_rag_toggle():
@@ -1184,11 +1181,11 @@ def render_self_rag_toggle():
             "Answer Grading", value=st.session_state.self_rag_answer_grading,
             key="self_rag_ag", help="Tự đánh giá chất lượng câu trả lời",
         )
-        st.caption("🧠 Multi-hop reasoning: tự động bật khi cần")
+        st.caption("Multi-hop reasoning: tự động bật khi cần")
     elif not has_docs:
-        st.caption("⚠️ Tải tài liệu để kích hoạt Self-RAG")
+        st.caption("Tải tài liệu để kích hoạt Self-RAG")
     else:
-        st.caption("🔵 Dùng RAG thông thường")
+        st.caption("Dùng RAG thông thường")
 
 
 def render_self_rag_metadata(result: dict):
@@ -1204,18 +1201,18 @@ def render_self_rag_metadata(result: dict):
     used_multihop = result.get("used_multihop", False)
 
     conf_pct = int(confidence * 100)
-    conf_icon = "✅" if conf_pct >= 70 else ("⚠️" if conf_pct >= 40 else "❌")
+    conf_icon = "[OK]" if conf_pct >= 70 else ("[!]" if conf_pct >= 40 else "[X]")
     conf_label = "Cao" if conf_pct >= 70 else ("Trung bình" if conf_pct >= 40 else "Thấp")
-    hallucination_icon = "🚨 Có thể có hallucination" if has_hallucination else "✅ Không phát hiện hallucination"
-    grounded_icon = "✅ Dựa trên tài liệu" if is_grounded else "⚠️ Có thể tự bịa"
-    multihop_str = f"| 🔀 Multi-hop: {len(sub_questions)} sub-questions" if used_multihop else ""
-    feedback_html = f"<div style='color:#9aa5bc;margin-bottom:6px;'>💬 <em>{feedback}</em></div>" if feedback else ""
+    hallucination_icon = "Có thể có hallucination" if has_hallucination else "Không phát hiện hallucination"
+    grounded_icon = "Dựa trên tài liệu" if is_grounded else "Có thể tự bịa"
+    multihop_str = f"| Multi-hop: {len(sub_questions)} sub-questions" if used_multihop else ""
+    feedback_html = f"<div style='color:#4B5563;margin-bottom:6px;'><em>{feedback}</em></div>" if feedback else ""
 
     st.markdown(
         f"""<div style="background:rgba(108,140,255,0.08);border:1px solid rgba(108,140,255,0.25);
         border-radius:12px;padding:14px 16px;margin-top:10px;font-size:0.82rem;">
             <div style="font-weight:700;color:#9aa5bc;margin-bottom:10px;font-size:0.7rem;
-            text-transform:uppercase;letter-spacing:0.08em;">🧠 Self-RAG Analysis</div>
+            text-transform:uppercase;letter-spacing:0.08em;">Self-RAG Analysis</div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
                 <span>{conf_icon} Confidence: <strong>{conf_pct}% ({conf_label})</strong></span>
                 <span>{grounded_icon}</span>
@@ -1223,20 +1220,20 @@ def render_self_rag_metadata(result: dict):
             </div>
             {feedback_html}
             <div style='color:#6b7894;font-size:0.72rem;'>
-                📊 Docs: {docs_before} retrieved → {docs_after} sau filter {multihop_str}
+                Docs: {docs_before} retrieved → {docs_after} sau filter {multihop_str}
             </div>
         </div>""",
         unsafe_allow_html=True,
     )
 
     if len(rewritten) > 1:
-        with st.expander("🔍 Xem Query Rewriting", expanded=False):
+        with st.expander("Xem Query Rewriting", expanded=False):
             for i, q in enumerate(rewritten):
-                label = "📌 Gốc" if i == 0 else f"✏️ Variant {i}"
+                label = "Gốc" if i == 0 else f"Variant {i}"
                 st.markdown(f"**{label}:** {q}")
 
     if sub_questions:
-        with st.expander("🔗 Multi-hop Sub-questions", expanded=False):
+        with st.expander("Multi-hop Sub-questions", expanded=False):
             for sq in sub_questions:
                 st.markdown(f"• {sq}")
 
@@ -1245,11 +1242,11 @@ def render_action_buttons():
     action_col1, action_col2 = st.columns(2)
 
     with action_col1:
-        if st.button("🗑️ Xóa lịch sử", use_container_width=True, key="clear_chat_btn"):
+        if st.button("Xóa lịch sử", use_container_width=True, key="clear_chat_btn"):
             confirm_clear_history_dialog()
 
     with action_col2:
-        if st.button("📦 Xóa tài liệu", use_container_width=True, key="clear_vs_btn"):
+        if st.button("Xóa tài liệu", use_container_width=True, key="clear_vs_btn"):
             confirm_clear_vectorstore_dialog()
 
 
@@ -1287,7 +1284,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
         status_container.markdown(
             f"""
             <div class="processing-toast">
-                📖 Đang đọc <strong>{file_name}</strong> ({idx + 1}/{total})...
+                Đang đọc <strong>{file_name}</strong> ({idx + 1}/{total})...
             </div>
             """,
             unsafe_allow_html=True,
@@ -1316,7 +1313,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
             status_container.markdown(
                 f"""
                 <div class="processing-toast">
-                    ✂️ Đang chia nhỏ <strong>{file_name}</strong> ({num_pages} trang)...
+                    Đang chia nhỏ <strong>{file_name}</strong> ({num_pages} trang)...
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1334,10 +1331,10 @@ def process_documents(uploaded_files, upload_signature: str = ""):
                     f"Đã xử lý '{file_name}': {num_pages} trang → {len(chunks)} chunks"
                 )
             else:
-                st.warning(f"⚠️ '{file_name}' không có nội dung văn bản.")
+                st.warning(f"'{file_name}' không có nội dung văn bản.")
 
         except Exception as e:
-            st.error(f"❌ Lỗi khi xử lý '{file_name}': {str(e)}")
+            st.error(f"Lỗi khi xử lý '{file_name}': {str(e)}")
             logger.error(f"Lỗi xử lý '{file_name}': {str(e)}")
         finally:
             if "tmp_path" in locals() and os.path.exists(tmp_path):
@@ -1350,7 +1347,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
         status_container.markdown(
             f"""
             <div class="processing-toast">
-                🔧 Đang tạo vector index cho <strong>{len(all_chunks)}</strong> chunks...
+                Đang tạo vector index cho <strong>{len(all_chunks)}</strong> chunks...
             </div>
             """,
             unsafe_allow_html=True,
@@ -1384,7 +1381,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
             status_container.markdown(
                 f"""
                 <div class="success-toast">
-                    🎉 Hoàn tất! {len(new_files_info)} tài liệu · {total_new_pages} trang · {total_new_chunks} chunks
+                    Hoàn tất! {len(new_files_info)} tài liệu · {total_new_pages} trang · {total_new_chunks} chunks
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1392,7 +1389,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
             time.sleep(2)
 
         except Exception as e:
-            st.error(f"❌ Lỗi khi tạo vector store: {str(e)}")
+            st.error(f"Lỗi khi tạo vector store: {str(e)}")
             logger.error(f"Lỗi tạo vector store: {str(e)}")
 
     # Cleanup
@@ -1421,26 +1418,26 @@ def render_main():
             sources = msg.get("sources", [])
             question_ctx = msg.get("question_ctx", "")
             if role == "user":
-                with st.chat_message("user", avatar="👤"):
+                with st.chat_message("user"):
                     st.markdown(content)
             else:
-                with st.chat_message("assistant", avatar="🧠"):
+                with st.chat_message("assistant"):
                     st.markdown(content)
                     if sources:
                         render_sources(sources, question=question_ctx)
 
     # Settings expander — đặt trên chat input, kiểu ChatGPT
-    with st.expander("⚙️ Cài đặt tìm kiếm", expanded=False):
+    with st.expander("Cài đặt tìm kiếm", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown('<div class="section-header">🔍 Lọc tài liệu (Q8)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">Lọc tài liệu (Q8)</div>', unsafe_allow_html=True)
             render_metadata_filter()
-            st.markdown('<div class="section-header">🔀 Hybrid Search (Q7)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">Hybrid Search (Q7)</div>', unsafe_allow_html=True)
             render_hybrid_toggle()
         with col2:
-            st.markdown('<div class="section-header">🎯 Re-ranking (Q9)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">Re-ranking (Q9)</div>', unsafe_allow_html=True)
             render_reranker_toggle()
-            st.markdown('<div class="section-header">🧠 Self-RAG (Q10)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">Self-RAG (Q10)</div>', unsafe_allow_html=True)
             render_self_rag_toggle()
 
     # Chat input
@@ -1461,7 +1458,7 @@ def render_welcome():
         st.markdown(
             """
             <div class="welcome-hero">
-                <div class="welcome-icon">💬</div>
+                <div class="welcome-icon">S</div>
                 <h1>Sẵn sàng trò chuyện!</h1>
                 <p>
                     Tài liệu đã được xử lý thành công. Hãy đặt câu hỏi về nội dung
@@ -1475,7 +1472,7 @@ def render_welcome():
         st.markdown(
             """
             <div class="welcome-hero">
-                <div class="welcome-icon">🧠</div>
+                <div class="welcome-icon">S</div>
                 <h1>Chào mừng đến SmartDocAI</h1>
                 <p>
                     Trợ lý AI thông minh giúp bạn phân tích và hỏi đáp nội dung
@@ -1503,10 +1500,10 @@ def render_welcome():
     # Suggested questions
     example_cols = st.columns(2, gap="small")
     examples = [
-        ("📝", "Tóm tắt nội dung chính của tài liệu"),
-        ("🔍", "What are the key findings?"),
-        ("📊", "Giải thích phần kết luận chi tiết"),
-        ("📋", "Liệt kê các khuyến nghị quan trọng"),
+        ("", "Tóm tắt nội dung chính của tài liệu"),
+        ("", "What are the key findings?"),
+        ("", "Giải thích phần kết luận chi tiết"),
+        ("", "Liệt kê các khuyến nghị quan trọng"),
     ]
 
     for i, (icon, example) in enumerate(examples):
@@ -1560,7 +1557,7 @@ def render_sources(sources: list, question: str = ""):
         page_str = f"Trang {page}/{total}" if total else f"Trang {page}"
         badges_html += (
             f'<span class="citation-badge">'
-            f'📄 {file_label} — {page_str}'
+            f'{file_label} — {page_str}'
             f'</span>'
         )
 
@@ -1572,7 +1569,7 @@ def render_sources(sources: list, question: str = ""):
     )
 
     # ── Expander chi tiết ──
-    with st.expander(f"📖 Xem {len(sources)} nguồn trích dẫn", expanded=False):
+    with st.expander(f"Xem {len(sources)} nguồn trích dẫn", expanded=False):
         for s in sources:
             file_label = s['file']
             page = s.get('page', '?')
@@ -1584,7 +1581,7 @@ def render_sources(sources: list, question: str = ""):
 
             page_str = f"Trang {page} / {total}" if total else f"Trang {page}"
             score_pct = int(score * 100)
-            file_icon = "📄" if file_type == "PDF" else "📝"
+            file_icon = "PDF" if file_type == "PDF" else "DOCX"
 
             highlighted_content = highlight_text(content, question) if question else __import__('html').escape(content)
 
@@ -1601,7 +1598,7 @@ def render_sources(sources: list, question: str = ""):
     </div>
   </div>
   <div class="citation-score-wrap">
-    <span class="citation-score-label">🔍 Độ liên quan</span>
+    <span class="citation-score-label">Độ liên quan</span>
     <div class="citation-score-bar-bg">
       <div class="citation-score-bar-fill" style="width:{score_pct}%;"></div>
     </div>
@@ -1617,11 +1614,11 @@ def render_sources(sources: list, question: str = ""):
 def handle_user_input(user_input: str):
     st.session_state.chat_history.append({"role": "user", "content": user_input})
  
-    with st.chat_message("user", avatar="👤"):
+    with st.chat_message("user"):
         st.markdown(user_input)
  
-    with st.chat_message("assistant", avatar="🧠"):
-        with st.spinner("🤔 Đang phân tích và suy nghĩ..."):
+    with st.chat_message("assistant"):
+        with st.spinner("Đang phân tích và suy nghĩ..."):
  
             # ── Q10: Self-RAG Pipeline ────────────────────────────────
             if st.session_state.self_rag_enabled and st.session_state.vector_store is not None:
@@ -1696,15 +1693,15 @@ def handle_user_input(user_input: str):
         active_filter = result.get("active_filter", [])
         badge_parts = []
         if "self_rag" in mode:
-            badge_parts.append("🧠 Self-RAG")
+            badge_parts.append("Self-RAG")
         elif "hybrid" in mode:
-            badge_parts.append("🔀 Hybrid Search")
+            badge_parts.append("Hybrid Search")
         else:
-            badge_parts.append("🔵 Vector Search")
+            badge_parts.append("Vector Search")
         if "reranked" in mode:
-            badge_parts.append("🎯 Cross-Encoder Reranked")
+            badge_parts.append("Cross-Encoder Reranked")
         if active_filter:
-            badge_parts.append(f"🔒 Lọc: {', '.join(active_filter)}")
+            badge_parts.append(f"Lọc: {', '.join(active_filter)}")
         st.caption(" · ".join(badge_parts))
  
         # ── Sources ───────────────────────────────────────────────────
@@ -1713,9 +1710,9 @@ def handle_user_input(user_input: str):
  
         # ── Error / Fallback ──────────────────────────────────────────
         if result.get("error") and not result.get("used_fallback", False):
-            st.error(f"⚠️ {result['error']}")
+            st.error(f"{result['error']}")
         elif result.get("used_fallback", False):
-            st.info("💡 Đang dùng chế độ dự phòng do Ollama chưa phản hồi ổn định.")
+            st.info("Đang dùng chế độ dự phòng do Ollama chưa phản hồi ổn định.")
  
     # Lưu vào history (kèm self_rag_meta để render lại khi scroll)
     st.session_state.chat_history.append({

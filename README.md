@@ -1,4 +1,4 @@
-# 🧠 SmartDocAI — Trợ lý Tài liệu Thông minh
+# SmartDocAI — Trợ lý Tài liệu Thông minh
 
 Hệ thống chatbot RAG (Retrieval-Augmented Generation) chạy **hoàn toàn offline**, hỗ trợ hỏi đáp thông minh dựa trên nội dung tài liệu PDF.
 
@@ -8,20 +8,20 @@ Hệ thống chatbot RAG (Retrieval-Augmented Generation) chạy **hoàn toàn o
 
 ---
 
-## 🚀 Tính năng chính
+## Tính năng chính
 
 | Tính năng | Mô tả |
 |---|---|
-| 📄 **Upload PDF** | Tải nhiều file PDF cùng lúc |
-| 🔍 **Tìm kiếm ngữ nghĩa** | Tự động chunking, indexing và truy xuất thông tin liên quan |
-| 🤖 **Hỏi đáp AI** | Trả lời câu hỏi dựa trên nội dung tài liệu bằng Qwen2.5:7b |
-| 🌐 **Đa ngôn ngữ** | Tự động nhận diện và trả lời bằng Tiếng Việt hoặc Tiếng Anh |
-| 💬 **Lịch sử chat** | Hiển thị lịch sử trò chuyện trực quan |
-| ⚠️ **Xử lý lỗi** | Thông báo rõ ràng khi gặp sự cố |
+| **Upload PDF** | Tải nhiều file PDF cùng lúc |
+| **Tìm kiếm ngữ nghĩa** | Tự động chunking, indexing và truy xuất thông tin liên quan |
+| **Hỏi đáp AI** | Trả lời câu hỏi dựa trên nội dung tài liệu bằng Qwen2.5:7b |
+| **Đa ngôn ngữ** | Tự động nhận diện và trả lời bằng Tiếng Việt hoặc Tiếng Anh |
+| **Lịch sử chat** | Hiển thị lịch sử trò chuyện trực quan |
+| **Xử lý lỗi** | Thông báo rõ ràng khi gặp sự cố |
 
 ---
 
-## 🛠️ Công nghệ sử dụng
+## Công nghệ sử dụng
 
 - **LLM**: Qwen2.5:7b qua [Ollama](https://ollama.com)
 - **Framework AI**: LangChain
@@ -32,7 +32,7 @@ Hệ thống chatbot RAG (Retrieval-Augmented Generation) chạy **hoàn toàn o
 
 ---
 
-## 📦 Cài đặt
+## Cài đặt
 
 ### 1. Cài đặt Ollama
 
@@ -60,17 +60,17 @@ Truy cập: http://localhost:8501
 
 ---
 
-## 📖 Hướng dẫn sử dụng
+## Hướng dẫn sử dụng
 
 1. **Đảm bảo Ollama đang chạy** — Kiểm tra trạng thái ở sidebar
 2. **Tải file PDF** — Click "Browse files" ở sidebar, chọn 1 hoặc nhiều file PDF
-3. **Xử lý tài liệu** — Click "🚀 Xử lý tài liệu" và chờ hoàn tất
+3. **Xử lý tài liệu** — Click "Xử lý tài liệu" và chờ hoàn tất
 4. **Đặt câu hỏi** — Gõ câu hỏi ở ô chat bên dưới
 5. **Xem câu trả lời** — AI sẽ trả lời kèm nguồn tham khảo (file, trang)
 
 ---
 
-## 📁 Cấu trúc dự án
+## Cấu trúc dự án
 
 ```
 SmartDocAI/
@@ -89,7 +89,7 @@ SmartDocAI/
 
 ---
 
-## ⚙️ Cấu hình
+## Cấu hình
 
 Chỉnh sửa `config.py` để thay đổi:
 
@@ -103,7 +103,7 @@ Chỉnh sửa `config.py` để thay đổi:
 
 ---
 
-## 🧪 Kiểm thử (Testing)
+## Kiểm thử (Testing)
 
 ### Cài đặt pytest
 
@@ -140,7 +140,7 @@ pytest tests/test_vector_store.py -v
 
 ---
 
-## 🏗️ Kiến trúc hệ thống
+## Kiến trúc hệ thống
 
 ```
 User (Streamlit UI - app.py)
@@ -167,13 +167,13 @@ User (Streamlit UI - app.py)
        │
        ▼
   document_processor.py
-  → Extract text từ PDF/DOCX
+  → Extract text tu PDF/DOCX
   → Chunking (size=1000, overlap=200)
 ```
 
 ---
 
-## ⚙️ Cấu hình chi tiết (Configuration Reference)
+## Cấu hình chi tiết (Configuration Reference)
 
 | Nhóm | Tham số | Mặc định | Mô tả |
 |---|---|---|---|
@@ -182,7 +182,7 @@ User (Streamlit UI - app.py)
 | **LLM** | `LLM_TEMPERATURE` | `0.1` | Độ sáng tạo (0=xác định, 1=ngẫu nhiên) |
 | **Embedding** | `EMBEDDING_MODEL` | `paraphrase-multilingual-mpnet-base-v2` | Model embedding 768-dim |
 | **Chunking** | `CHUNK_SIZE` | `1000` | Số ký tự mỗi chunk |
-| **Chunking** | `CHUNK_OVERLAP` | `200` | Ký tự chồng lặp giữa chunks |
+| **Chunking** | `CHUNK_OVERLAP` | `200` | Ký tự chồng lấp giữa chunks |
 | **Retrieval** | `TOP_K` | `3` | Số chunk FAISS trả về |
 | **Retrieval** | `FETCH_K` | `30` | Số chunk FAISS lấy trước khi MMR rerank |
 | **Hybrid** | `VECTOR_WEIGHT` | `0.6` | Trọng số FAISS trong hybrid search |
