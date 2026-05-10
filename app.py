@@ -35,6 +35,7 @@ from modules.vector_store import (
 from modules.rag_chain import ask_question, check_ollama_connection, get_llm
 from modules.reranker import rerank_with_cross_encoder
 from modules.self_rag import self_rag_pipeline
+from modules.co_rag import co_rag_pipeline
 
 # ============================================================
 # Cấu hình logging
@@ -735,6 +736,12 @@ def init_session_state():
         "self_rag_query_rewrite": True,
         "self_rag_relevance_filter": True,
         "self_rag_answer_grading": True,
+        # Co-RAG
+        "co_rag_enabled": False,
+        "co_rag_agent_semantic": True,
+        "co_rag_agent_keyword": True,
+        "co_rag_agent_conceptual": True,
+        "co_rag_merge_strategy": "voting",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1237,6 +1244,99 @@ def render_self_rag_metadata(result: dict):
             for sq in sub_questions:
                 st.markdown(f"• {sq}")
 
+
+def render_co_rag_toggle():
+    """Co-RAG — toggle bật/tắt cùng cấu hình agents."""
+    has_docs = st.session_state.vector_store is not None
+    co_rag_on = st.toggle(
+        "Bật Co-RAG (Multi-Agent)",
+        value=st.session_state.co_rag_enabled,
+        disabled=not has_docs,
+        key="co_rag_toggle",
+        help=(
+            "Co-RAG chạy 3 agents song song (Semantic, Keyword, Conceptual) và hợp nhất "
+            "kết quả qua voting để tăng chất lượng truy xuất."
+        ),
+    )
+    st.session_state.co_rag_enabled = co_rag_on
+
+    if co_rag_on and has_docs:
+        strategy = st.selectbox(
+            "Chiến lược merge",
+            options=["voting", "union", "intersection"],
+            index=["voting", "union", "intersection"].index(
+                st.session_state.co_rag_merge_strategy
+            ),
+            key="co_rag_strategy_select",
+            help=(
+                "voting: chỉ giữ docs được ≥2 agents đồng ý\n"
+                "union: giữ tất cả docs từ mọi agents\n"
+                "intersection: chỉ giữ docs có trong MỌI agents"
+            ),
+        )
+        st.session_state.co_rag_merge_strategy = strategy
+
+        st.markdown("**Agents:**")
+        st.session_state.co_rag_agent_semantic = st.checkbox(
+            "Semantic Agent (FAISS)",
+            value=st.session_state.co_rag_agent_semantic,
+            key="co_rag_sem",
+            help="Tìm kiếm ngữ nghĩa bằng vector embedding",
+        )
+        st.session_state.co_rag_agent_keyword = st.checkbox(
+            "Keyword Agent (BM25)",
+            value=st.session_state.co_rag_agent_keyword,
+            key="co_rag_kw",
+            help="Tìm kiếm từ khoá chính xác bằng BM25",
+        )
+        st.session_state.co_rag_agent_conceptual = st.checkbox(
+            "Conceptual Agent (LLM)",
+            value=st.session_state.co_rag_agent_conceptual,
+            key="co_rag_con",
+            help="LLM phân rã câu hỏi → sub-questions → retrieve",
+        )
+        st.caption("Consensus Merger tổng hợp kết quả từ các agents")
+    elif not has_docs:
+        st.caption("Tải tài liệu để kích hoạt Co-RAG")
+    else:
+        st.caption("Dùng RAG thông thường")
+
+
+def render_co_rag_metadata(result: dict):
+    """Hiển thị Co-RAG Analysis panel sau câu trả lời."""
+    agent_counts = result.get("co_rag_agent_counts", {})
+    total_before = result.get("co_rag_total_before_merge", 0)
+    total_after = result.get("co_rag_total_after_merge", 0)
+    strategy = result.get("co_rag_merge_strategy", "voting")
+
+    agents_html = "".join(
+        f"<span style='margin-right:12px;'>● <strong>{name}</strong>: {cnt} docs</span>"
+        for name, cnt in agent_counts.items()
+    )
+    strategy_color = {
+        "voting": "#3B82F6",
+        "union": "#16A34A",
+        "intersection": "#D97706",
+    }.get(strategy, "#6B7280")
+
+    st.markdown(
+        f"""<div style="background:rgba(108,140,255,0.07);border:1px solid rgba(108,140,255,0.22);
+        border-radius:12px;padding:14px 16px;margin-top:10px;font-size:0.82rem;">
+            <div style="font-weight:700;color:#9aa5bc;margin-bottom:10px;font-size:0.7rem;
+            text-transform:uppercase;letter-spacing:0.08em;">Co-RAG Analysis</div>
+            <div style="margin-bottom:8px;color:#4B5563;">
+                {agents_html}
+            </div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.78rem;color:#6b7894;">
+                <span>Tổng docs (trước merge): <strong>{total_before}</strong></span>
+                <span>Sau Consensus Merger: <strong>{total_after}</strong></span>
+                <span>Chiến lược: <strong style="color:{strategy_color};">{strategy}</strong></span>
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
 def render_action_buttons():
     """Render các nút thao tác — dialog xác nhận hiển thị ở giữa màn hình."""
     action_col1, action_col2 = st.columns(2)
@@ -1439,6 +1539,8 @@ def render_main():
             render_reranker_toggle()
             st.markdown('<div class="section-header">Self-RAG (Q10)</div>', unsafe_allow_html=True)
             render_self_rag_toggle()
+            st.markdown('<div class="section-header">Co-RAG (Multi-Agent)</div>', unsafe_allow_html=True)
+            render_co_rag_toggle()
 
     # Chat input
     if prompt := st.chat_input(
@@ -1634,9 +1736,30 @@ def handle_user_input(user_input: str):
                 result["search_mode"] = "self_rag"
                 result["active_filter"] = st.session_state.active_file_filter
                 self_rag_meta = result  # lưu lại để render
- 
+                co_rag_meta = None
+
+            # ── Co-RAG: Multi-Agent Pipeline ──────────────────────────
+            elif st.session_state.co_rag_enabled and st.session_state.vector_store is not None:
+                llm = get_llm()
+                result = co_rag_pipeline(
+                    question=user_input,
+                    vector_store=st.session_state.vector_store,
+                    raw_documents=st.session_state.raw_documents,
+                    llm=llm,
+                    min_votes=config.CO_RAG_MIN_VOTES,
+                    merge_strategy=st.session_state.co_rag_merge_strategy,
+                    enable_agent_semantic=st.session_state.co_rag_agent_semantic,
+                    enable_agent_keyword=st.session_state.co_rag_agent_keyword,
+                    enable_agent_conceptual=st.session_state.co_rag_agent_conceptual,
+                )
+                result["search_mode"] = "co_rag"
+                result["active_filter"] = st.session_state.active_file_filter
+                co_rag_meta = result  # lưu lại để render
+                self_rag_meta = None
+
             else:
                 self_rag_meta = None
+                co_rag_meta = None
  
                 # ── Q7: Hybrid Search ─────────────────────────────────
                 retriever = None
@@ -1687,13 +1810,19 @@ def handle_user_input(user_input: str):
         # ── Q10: Self-RAG metadata panel ─────────────────────────────
         if self_rag_meta:
             render_self_rag_metadata(self_rag_meta)
- 
+
+        # ── Co-RAG metadata panel ────────────────────────────────────
+        if co_rag_meta:
+            render_co_rag_metadata(co_rag_meta)
+
         # ── Badge chế độ tìm kiếm ────────────────────────────────────
         mode = result.get("search_mode", "vector")
         active_filter = result.get("active_filter", [])
         badge_parts = []
         if "self_rag" in mode:
             badge_parts.append("Self-RAG")
+        elif "co_rag" in mode:
+            badge_parts.append("Co-RAG (Multi-Agent)")
         elif "hybrid" in mode:
             badge_parts.append("Hybrid Search")
         else:
@@ -1721,6 +1850,7 @@ def handle_user_input(user_input: str):
         "sources": result.get("sources", []),
         "question_ctx": user_input,
         "self_rag_meta": self_rag_meta,
+        "co_rag_meta": co_rag_meta,
     })
  
     st.rerun()

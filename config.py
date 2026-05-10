@@ -62,3 +62,10 @@ HYBRID_TOP_K         = 5     # số kết quả lấy từ mỗi retriever trư�
 # Q8 — Multi-document Metadata Filtering
 # ============================================================
 METADATA_FILTER_FIELD = "source"   # field trong Document.metadata dùng để filter
+
+# ============================================================
+# Co-RAG — Collaborative RAG (Multi-Agent)
+# ============================================================
+CO_RAG_TOP_K_PER_AGENT = 5   # số docs mỗi agent truy xuất
+CO_RAG_MIN_VOTES = 2          # số agents tối thiểu phải đồng ý (dùng với strategy "voting")
+CO_RAG_MERGE_STRATEGY = "voting"  # "voting" | "union" | "intersection"
