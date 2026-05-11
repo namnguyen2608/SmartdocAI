@@ -35,6 +35,7 @@ from modules.vector_store import (
 from modules.rag_chain import ask_question, check_ollama_connection, get_llm
 from modules.reranker import rerank_with_cross_encoder
 from modules.self_rag import self_rag_pipeline
+from modules.co_rag import co_rag_pipeline
 
 # ============================================================
 # Cấu hình logging
@@ -513,6 +514,23 @@ st.markdown(
         border-radius: var(--radius-md);
     }
 
+    /* ── History Button items ── */
+    .history-btn-item {
+        width: 100%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        margin-bottom: 5px;
+        cursor: pointer;
+        text-align: left;
+        transition: var(--transition);
+    }
+    .history-btn-item:hover {
+        background: var(--accent-soft);
+        border-color: var(--accent-border);
+    }
+
     /* ── Confirmation Dialog ── */
     .confirm-dialog {
         background: var(--bg-elevated);
@@ -725,6 +743,11 @@ def init_session_state():
         "is_processing": False,
         "auto_process_upload": True,
         "last_processed_upload_signature": "",
+        # Q4 — Chunk Parameters
+        "chunk_size": config.CHUNK_SIZE,
+        "chunk_overlap": config.CHUNK_OVERLAP,
+        # History viewer
+        "selected_history_idx": None,
         # Q7 — Hybrid Search
         "hybrid_enabled": False,
         "raw_documents": [],        # toàn bộ chunks để xây BM25
@@ -735,6 +758,12 @@ def init_session_state():
         "self_rag_query_rewrite": True,
         "self_rag_relevance_filter": True,
         "self_rag_answer_grading": True,
+        # Co-RAG
+        "co_rag_enabled": False,
+        "co_rag_agent_semantic": True,
+        "co_rag_agent_keyword": True,
+        "co_rag_agent_conceptual": True,
+        "co_rag_merge_strategy": "voting",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -792,6 +821,12 @@ def render_sidebar():
             unsafe_allow_html=True,
         )
 
+        # ── Chunk Parameters ──
+        st.markdown('<div class="section-header">Cài đặt Chunking (Q4)</div>', unsafe_allow_html=True)
+        render_chunk_settings()
+
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+
         # ── Upload ──
         st.markdown('<div class="section-header">Tải tài liệu lên</div>', unsafe_allow_html=True)
         render_upload_section()
@@ -808,8 +843,83 @@ def render_sidebar():
         st.markdown('<div class="section-header">Thao tác</div>', unsafe_allow_html=True)
         render_action_buttons()
 
+        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+
+        # ── Lịch sử hội thoại ──
+        st.markdown('<div class="section-header">Lịch sử hội thoại</div>', unsafe_allow_html=True)
+        render_chat_history_sidebar()
+
 
 # ── Sidebar helpers ──────────────────────────────────────────────────────────
+
+CHUNK_SIZE_OPTIONS   = [500, 1000, 1500, 2000]
+CHUNK_OVERLAP_OPTIONS = [50, 100, 200]
+
+
+def render_chunk_settings():
+    """Q4 — Cho phép người dùng tùy chỉnh chunk_size và chunk_overlap."""
+    current_size    = st.session_state.chunk_size
+    current_overlap = st.session_state.chunk_overlap
+
+    # Đảm bảo giá trị hiện tại nằm trong danh sách option
+    size_idx    = CHUNK_SIZE_OPTIONS.index(current_size) if current_size in CHUNK_SIZE_OPTIONS else 2
+    overlap_idx = CHUNK_OVERLAP_OPTIONS.index(current_overlap) if current_overlap in CHUNK_OVERLAP_OPTIONS else 1
+
+    new_size = st.selectbox(
+        "Chunk Size (ký tự)",
+        options=CHUNK_SIZE_OPTIONS,
+        index=size_idx,
+        key="chunk_size_select",
+        help=(
+            "Số ký tự tối đa trong mỗi chunk.\n"
+            "• 500 — chi tiết, nhiều chunk hơn\n"
+            "• 1000 — cân bằng\n"
+            "• 1500 — mặc định\n"
+            "• 2000 — ngữ cảnh rộng hơn"
+        ),
+    )
+
+    new_overlap = st.selectbox(
+        "Chunk Overlap (ký tự)",
+        options=CHUNK_OVERLAP_OPTIONS,
+        index=overlap_idx,
+        key="chunk_overlap_select",
+        help=(
+            "Số ký tự chồng lấp giữa các chunk liền kề.\n"
+            "Overlap lớn hơn giúp không mất ngữ cảnh ở ranh giới chunk."
+        ),
+    )
+
+    # Phát hiện thay đổi
+    changed = (new_size != current_size) or (new_overlap != current_overlap)
+    if changed:
+        st.session_state.chunk_size    = new_size
+        st.session_state.chunk_overlap = new_overlap
+
+    # Badge hiển thị cấu hình hiện tại
+    st.markdown(
+        f"""
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+            <span style="font-size:0.7rem;font-weight:700;
+                background:var(--accent-soft);color:var(--accent);
+                border:1px solid var(--accent-border);border-radius:999px;
+                padding:2px 10px;">
+                Size: {st.session_state.chunk_size}
+            </span>
+            <span style="font-size:0.7rem;font-weight:700;
+                background:var(--accent-soft);color:var(--accent);
+                border:1px solid var(--accent-border);border-radius:999px;
+                padding:2px 10px;">
+                Overlap: {st.session_state.chunk_overlap}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if changed and st.session_state.processed_files:
+        st.caption("⚠️ Tải lại tài liệu để áp dụng cài đặt mới.")
+
 
 def render_system_status():
     """Kiểm tra và hiển thị trạng thái Ollama."""
@@ -960,22 +1070,24 @@ def render_file_list():
 
 
 def render_chat_history_sidebar():
-    """Render lịch sử hội thoại trong sidebar."""
+    """Render lịch sử hội thoại trong sidebar — mỗi item là nút bấm được."""
     history = st.session_state.chat_history
 
-    # Lọc ra các cặp câu hỏi - câu trả lời
+    # Tích các cặp Q&A
     qa_pairs = []
     i = 0
     while i < len(history):
         if history[i]["role"] == "user":
             question = history[i]["content"]
             answer = ""
+            sources = []
             if i + 1 < len(history) and history[i + 1]["role"] == "assistant":
                 answer = history[i + 1]["content"]
+                sources = history[i + 1].get("sources", [])
                 i += 2
             else:
                 i += 1
-            qa_pairs.append({"question": question, "answer": answer})
+            qa_pairs.append({"question": question, "answer": answer, "sources": sources})
         else:
             i += 1
 
@@ -991,31 +1103,106 @@ def render_chat_history_sidebar():
         )
         return
 
-    # Hiển thị danh sách câu hỏi (mới nhất lên đầu)
-    st.caption(f"{len(qa_pairs)} câu hỏi đã được hỏi")
+    st.caption(f"{len(qa_pairs)} câu hỏi — nhấn để xem chi tiết")
 
-    for idx, pair in enumerate(reversed(qa_pairs)):
-        q_display = pair["question"]
-        a_preview = pair["answer"][:120] + "..." if len(pair["answer"]) > 120 else pair["answer"]
-        # Sanitize: loại bỏ newlines, escape HTML entities và quotes
-        q_display = q_display.replace("\n", " ").replace("\r", " ")
-        a_preview = a_preview.replace("\n", " ").replace("\r", " ")
-        q_display = q_display.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-        a_preview = a_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    # Hiển thị danh sách (mới nhất lên đầu)
+    for display_idx, pair in enumerate(reversed(qa_pairs)):
+        real_idx = len(qa_pairs) - 1 - display_idx   # index gốc trong qa_pairs
+        q_short = pair["question"][:60] + ("…" if len(pair["question"]) > 60 else "")
+        a_short = pair["answer"][:80] + ("…" if len(pair["answer"]) > 80 else "")
+
+        # Nút bấm — Streamlit button mới nhất ủng hộ use_container_width
+        clicked = st.button(
+            f"  {q_short}",
+            key=f"hist_btn_{real_idx}",
+            use_container_width=True,
+            help=a_short,
+        )
+        if clicked:
+            st.session_state.selected_history_idx = real_idx
+            show_history_detail_dialog(qa_pairs, real_idx)
+
+
+@st.dialog(" Lịch sử hội thoại", width="large")
+def show_history_detail_dialog(qa_pairs: list, idx: int):
+    """Dialog hiển thị chi tiết một cặp Q&A trong lịch sử."""
+    pair = qa_pairs[idx]
+    total = len(qa_pairs)
+
+    # Header: số thứ tự
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    margin-bottom:12px;">
+            <span style="font-size:0.75rem;color:var(--text-muted);font-weight:600;
+                         text-transform:uppercase;letter-spacing:0.08em;">
+                Câu hỏi {idx + 1} / {total}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Câu hỏi
+    st.markdown(
+        f"""
+        <div style="background:var(--accent-soft);border:1px solid var(--accent-border);
+                    border-radius:var(--radius-md);padding:12px 16px;margin-bottom:12px;">
+            <div style="font-size:0.68rem;font-weight:700;color:var(--accent);
+                        text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Người dùng</div>
+            <div style="font-size:0.9rem;color:var(--text-primary);line-height:1.55;">
+                {pair['question'].replace(chr(10), '<br>')}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Câu trả lời
+    st.markdown(
+        """
+        <div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);
+                    text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">
+            Trợ lý AI
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(pair["answer"] if pair["answer"] else "_Chưa có câu trả lời._")
+
+    # Nguồn trích dẫn (nếu có)
+    if pair.get("sources"):
+        st.markdown("---")
+        src_lines = []
+        seen = set()
+        for s in pair["sources"]:
+            label = f"📎 **{s['file']}** — Trang {s.get('page', '?')}"
+            if label not in seen:
+                src_lines.append(label)
+                seen.add(label)
+        st.markdown("**Nguồn tham khảo:**")
+        for line in src_lines:
+            st.markdown(f"- {line}")
+
+    # Nút điếu hướng giữa các câu hỏi
+    st.markdown("---")
+    nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 1])
+    with nav_col1:
+        if idx > 0:
+            if st.button("← Trước", use_container_width=True, key="hist_prev"):
+                st.session_state.selected_history_idx = idx - 1
+                show_history_detail_dialog(qa_pairs, idx - 1)
+    with nav_col2:
         st.markdown(
-            f"""<div class="history-item"><div class="history-question">{q_display}</div><div class="history-answer-preview">{a_preview}</div></div>""",
+            f"<div style='text-align:center;font-size:0.75rem;color:var(--text-muted);"
+            f"padding-top:8px;'>{idx + 1} / {total}</div>",
             unsafe_allow_html=True,
         )
-
-    # Expander để xem chi tiết từng câu hỏi
-    with st.expander("Xem chi tiết câu hỏi đã hỏi", expanded=False):
-        for idx, pair in enumerate(reversed(qa_pairs)):
-            st.markdown(f"**Câu hỏi {len(qa_pairs) - idx}:**")
-            st.markdown(f"> {pair['question']}")
-            st.markdown(f"**Câu trả lời:**")
-            st.markdown(pair["answer"][:500] + ("..." if len(pair["answer"]) > 500 else ""))
-            if idx < len(qa_pairs) - 1:
-                st.markdown("---")
+    with nav_col3:
+        if idx < total - 1:
+            if st.button("Tiếp →", use_container_width=True, key="hist_next"):
+                st.session_state.selected_history_idx = idx + 1
+                show_history_detail_dialog(qa_pairs, idx + 1)
 
 
 @st.dialog("Xác nhận xóa lịch sử")
@@ -1237,6 +1424,99 @@ def render_self_rag_metadata(result: dict):
             for sq in sub_questions:
                 st.markdown(f"• {sq}")
 
+
+def render_co_rag_toggle():
+    """Co-RAG — toggle bật/tắt cùng cấu hình agents."""
+    has_docs = st.session_state.vector_store is not None
+    co_rag_on = st.toggle(
+        "Bật Co-RAG (Multi-Agent)",
+        value=st.session_state.co_rag_enabled,
+        disabled=not has_docs,
+        key="co_rag_toggle",
+        help=(
+            "Co-RAG chạy 3 agents song song (Semantic, Keyword, Conceptual) và hợp nhất "
+            "kết quả qua voting để tăng chất lượng truy xuất."
+        ),
+    )
+    st.session_state.co_rag_enabled = co_rag_on
+
+    if co_rag_on and has_docs:
+        strategy = st.selectbox(
+            "Chiến lược merge",
+            options=["voting", "union", "intersection"],
+            index=["voting", "union", "intersection"].index(
+                st.session_state.co_rag_merge_strategy
+            ),
+            key="co_rag_strategy_select",
+            help=(
+                "voting: chỉ giữ docs được ≥2 agents đồng ý\n"
+                "union: giữ tất cả docs từ mọi agents\n"
+                "intersection: chỉ giữ docs có trong MỌI agents"
+            ),
+        )
+        st.session_state.co_rag_merge_strategy = strategy
+
+        st.markdown("**Agents:**")
+        st.session_state.co_rag_agent_semantic = st.checkbox(
+            "Semantic Agent (FAISS)",
+            value=st.session_state.co_rag_agent_semantic,
+            key="co_rag_sem",
+            help="Tìm kiếm ngữ nghĩa bằng vector embedding",
+        )
+        st.session_state.co_rag_agent_keyword = st.checkbox(
+            "Keyword Agent (BM25)",
+            value=st.session_state.co_rag_agent_keyword,
+            key="co_rag_kw",
+            help="Tìm kiếm từ khoá chính xác bằng BM25",
+        )
+        st.session_state.co_rag_agent_conceptual = st.checkbox(
+            "Conceptual Agent (LLM)",
+            value=st.session_state.co_rag_agent_conceptual,
+            key="co_rag_con",
+            help="LLM phân rã câu hỏi → sub-questions → retrieve",
+        )
+        st.caption("Consensus Merger tổng hợp kết quả từ các agents")
+    elif not has_docs:
+        st.caption("Tải tài liệu để kích hoạt Co-RAG")
+    else:
+        st.caption("Dùng RAG thông thường")
+
+
+def render_co_rag_metadata(result: dict):
+    """Hiển thị Co-RAG Analysis panel sau câu trả lời."""
+    agent_counts = result.get("co_rag_agent_counts", {})
+    total_before = result.get("co_rag_total_before_merge", 0)
+    total_after = result.get("co_rag_total_after_merge", 0)
+    strategy = result.get("co_rag_merge_strategy", "voting")
+
+    agents_html = "".join(
+        f"<span style='margin-right:12px;'>● <strong>{name}</strong>: {cnt} docs</span>"
+        for name, cnt in agent_counts.items()
+    )
+    strategy_color = {
+        "voting": "#3B82F6",
+        "union": "#16A34A",
+        "intersection": "#D97706",
+    }.get(strategy, "#6B7280")
+
+    st.markdown(
+        f"""<div style="background:rgba(108,140,255,0.07);border:1px solid rgba(108,140,255,0.22);
+        border-radius:12px;padding:14px 16px;margin-top:10px;font-size:0.82rem;">
+            <div style="font-weight:700;color:#9aa5bc;margin-bottom:10px;font-size:0.7rem;
+            text-transform:uppercase;letter-spacing:0.08em;">Co-RAG Analysis</div>
+            <div style="margin-bottom:8px;color:#4B5563;">
+                {agents_html}
+            </div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.78rem;color:#6b7894;">
+                <span>Tổng docs (trước merge): <strong>{total_before}</strong></span>
+                <span>Sau Consensus Merger: <strong>{total_after}</strong></span>
+                <span>Chiến lược: <strong style="color:{strategy_color};">{strategy}</strong></span>
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
 def render_action_buttons():
     """Render các nút thao tác — dialog xác nhận hiển thị ở giữa màn hình."""
     action_col1, action_col2 = st.columns(2)
@@ -1320,7 +1600,11 @@ def process_documents(uploaded_files, upload_signature: str = ""):
             )
             progress_bar.progress(base_progress + (0.6 / total), text=f"Chia nhỏ {file_name}...")
 
-            chunks = split_documents(raw_docs)
+            chunks = split_documents(
+                raw_docs,
+                chunk_size=st.session_state.chunk_size,
+                chunk_overlap=st.session_state.chunk_overlap,
+            )
 
             if chunks:
                 all_chunks.extend(chunks)
@@ -1424,7 +1708,8 @@ def render_main():
                 with st.chat_message("assistant"):
                     st.markdown(content)
                     if sources:
-                        render_sources(sources, question=question_ctx)
+                        answer_ctx = msg.get("answer_ctx", "")
+                        render_sources(sources, question=question_ctx, answer=answer_ctx)
 
     # Settings expander — đặt trên chat input, kiểu ChatGPT
     with st.expander("Cài đặt tìm kiếm", expanded=False):
@@ -1439,6 +1724,8 @@ def render_main():
             render_reranker_toggle()
             st.markdown('<div class="section-header">Self-RAG (Q10)</div>', unsafe_allow_html=True)
             render_self_rag_toggle()
+            st.markdown('<div class="section-header">Co-RAG (Multi-Agent)</div>', unsafe_allow_html=True)
+            render_co_rag_toggle()
 
     # Chat input
     if prompt := st.chat_input(
@@ -1497,53 +1784,89 @@ def render_welcome():
             unsafe_allow_html=True,
         )
 
-    # Suggested questions
-    example_cols = st.columns(2, gap="small")
-    examples = [
-        ("", "Tóm tắt nội dung chính của tài liệu"),
-        ("", "What are the key findings?"),
-        ("", "Giải thích phần kết luận chi tiết"),
-        ("", "Liệt kê các khuyến nghị quan trọng"),
-    ]
-
-    for i, (icon, example) in enumerate(examples):
-        with example_cols[i % 2]:
-            if st.button(
-                f"{icon}  {example}",
-                key=f"example_{i}",
-                use_container_width=True,
-            ):
-                handle_user_input(example)
-
-
-
-def highlight_text(text: str, query: str) -> str:
+def highlight_text(text: str, query: str, answer: str = "") -> str:
     """
-    Escape HTML trong text rồi highlight các từ từ query bằng thẻ <mark>.
-    Case-insensitive. Chỉ highlight các token dài >= 2 ký tự.
+    Highlight các đoạn văn được sử dụng để trả lời theo 2 lớp ưu tiên:
+
+    Layer 1 (ưu tiên cao) — N-gram từ câu trả lời (answer):
+        Tìm các cụm 4-7 từ xuất hiện trong answer và cũng có trong chunk.
+        Đây là bằng chứng trực tiếp rằng LLM đã đọc đoạn này để tạo câu trả lời.
+
+    Layer 2 (fallback) — Keyword từ câu hỏi (query):
+        Các từ ≥ 3 ký tự từ query chưa được highlight ở layer 1.
     """
     import re
     import html
 
     safe = html.escape(text)
-    tokens = [
-        t for t in re.split(r"[\s\W]+", query)
-        if len(t) >= 2
+    candidates = []   # list of (phrase, layer)
+
+    # ── Layer 1: n-gram từ answer ──
+    if answer:
+        answer_clean = re.sub(r'[\*\_\`\#\>\|]', ' ', answer)   # strip markdown
+        answer_words = re.split(r'\s+', answer_clean.strip())
+        for n in range(7, 3, -1):   # 7 → 4 words
+            for i in range(len(answer_words) - n + 1):
+                phrase = ' '.join(answer_words[i : i + n])
+                phrase = phrase.strip('.,;:!?()')
+                if len(phrase) < 10:
+                    continue
+                # Kiểm tra phrase có xuất hiện trong nội dung chunk không
+                if re.search(re.escape(phrase), safe, re.IGNORECASE):
+                    candidates.append((phrase, 1))  # layer 1
+
+    # ── Layer 2: keyword từ query ──
+    query_tokens = [
+        t for t in re.split(r'[\s\W]+', query)
+        if len(t) >= 3
     ]
-    if not tokens:
+    for tok in query_tokens:
+        candidates.append((tok, 2))  # layer 2
+
+    if not candidates:
         return safe
 
-    pattern = "|".join(re.escape(t) for t in tokens)
-    highlighted = re.sub(
-        pattern,
-        lambda m: f'<mark>{html.escape(m.group(0))}</mark>',
-        safe,
-        flags=re.IGNORECASE,
-    )
-    return highlighted
+    # Sắp xếp: layer 1 trước, dài hơn trước (tránh khớp mảnh)
+    candidates = sorted(set(candidates), key=lambda x: (-x[1] == 1, -len(x[0])))
+    # loại trùng, giữ phrase dài hơn bao gồm phrase ngắn
+    unique_phrases = []
+    seen_lower = set()
+    for phrase, layer in candidates:
+        pl = phrase.lower()
+        if not any(pl in s for s in seen_lower):
+            unique_phrases.append((phrase, layer))
+            seen_lower.add(pl)
+
+    # Màu highlight theo layer
+    def make_mark(m, layer):
+        if layer == 1:
+            # layer 1: vàng đẮm — đoạn thực sự được dùng
+            return (
+                f'<mark style="background:rgba(251,191,36,0.35);'
+                f'color:#92400e;border-radius:3px;padding:1px 2px;font-weight:600;">'
+                f'{html.escape(m.group(0))}</mark>'
+            )
+        else:
+            # layer 2: xanh nhạt — keyword tìm kiếm
+            return (
+                f'<mark style="background:rgba(59,130,246,0.15);'
+                f'color:#1e40af;border-radius:3px;padding:1px 2px;">'
+                f'{html.escape(m.group(0))}</mark>'
+            )
+
+    result_text = safe
+    for phrase, layer in unique_phrases:
+        result_text = re.sub(
+            re.escape(phrase),
+            lambda m, _layer=layer: make_mark(m, _layer),
+            result_text,
+            flags=re.IGNORECASE,
+        )
+
+    return result_text
 
 
-def render_sources(sources: list, question: str = ""):
+def render_sources(sources: list, question: str = "", answer: str = ""):
     """Hiển thị nguồn trích dẫn: badge row nhanh + expander chi tiết."""
     if not sources:
         return
@@ -1570,6 +1893,28 @@ def render_sources(sources: list, question: str = ""):
 
     # ── Expander chi tiết ──
     with st.expander(f"Xem {len(sources)} nguồn trích dẫn", expanded=False):
+        # Chú thích màu sắc
+        st.markdown(
+            """
+            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.72rem;
+                        margin-bottom:10px;padding:6px 8px;
+                        background:var(--bg-surface);border-radius:6px;
+                        border:1px solid var(--border-subtle);">
+                <span style="display:flex;align-items:center;gap:5px;">
+                    <span style="display:inline-block;width:12px;height:12px;border-radius:2px;
+                                 background:rgba(251,191,36,0.45);"></span>
+                    <strong>Đoạn được dùng để trả lời</strong>
+                </span>
+                <span style="display:flex;align-items:center;gap:5px;">
+                    <span style="display:inline-block;width:12px;height:12px;border-radius:2px;
+                                 background:rgba(59,130,246,0.2);"></span>
+                    Từ khóa câu hỏi
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         for s in sources:
             file_label = s['file']
             page = s.get('page', '?')
@@ -1583,7 +1928,7 @@ def render_sources(sources: list, question: str = ""):
             score_pct = int(score * 100)
             file_icon = "PDF" if file_type == "PDF" else "DOCX"
 
-            highlighted_content = highlight_text(content, question) if question else __import__('html').escape(content)
+            highlighted_content = highlight_text(content, question, answer=answer)
 
             card_html = f"""
 <div class="citation-card">
@@ -1634,9 +1979,30 @@ def handle_user_input(user_input: str):
                 result["search_mode"] = "self_rag"
                 result["active_filter"] = st.session_state.active_file_filter
                 self_rag_meta = result  # lưu lại để render
- 
+                co_rag_meta = None
+
+            # ── Co-RAG: Multi-Agent Pipeline ──────────────────────────
+            elif st.session_state.co_rag_enabled and st.session_state.vector_store is not None:
+                llm = get_llm()
+                result = co_rag_pipeline(
+                    question=user_input,
+                    vector_store=st.session_state.vector_store,
+                    raw_documents=st.session_state.raw_documents,
+                    llm=llm,
+                    min_votes=config.CO_RAG_MIN_VOTES,
+                    merge_strategy=st.session_state.co_rag_merge_strategy,
+                    enable_agent_semantic=st.session_state.co_rag_agent_semantic,
+                    enable_agent_keyword=st.session_state.co_rag_agent_keyword,
+                    enable_agent_conceptual=st.session_state.co_rag_agent_conceptual,
+                )
+                result["search_mode"] = "co_rag"
+                result["active_filter"] = st.session_state.active_file_filter
+                co_rag_meta = result  # lưu lại để render
+                self_rag_meta = None
+
             else:
                 self_rag_meta = None
+                co_rag_meta = None
  
                 # ── Q7: Hybrid Search ─────────────────────────────────
                 retriever = None
@@ -1687,13 +2053,19 @@ def handle_user_input(user_input: str):
         # ── Q10: Self-RAG metadata panel ─────────────────────────────
         if self_rag_meta:
             render_self_rag_metadata(self_rag_meta)
- 
+
+        # ── Co-RAG metadata panel ────────────────────────────────────
+        if co_rag_meta:
+            render_co_rag_metadata(co_rag_meta)
+
         # ── Badge chế độ tìm kiếm ────────────────────────────────────
         mode = result.get("search_mode", "vector")
         active_filter = result.get("active_filter", [])
         badge_parts = []
         if "self_rag" in mode:
             badge_parts.append("Self-RAG")
+        elif "co_rag" in mode:
+            badge_parts.append("Co-RAG (Multi-Agent)")
         elif "hybrid" in mode:
             badge_parts.append("Hybrid Search")
         else:
@@ -1706,7 +2078,11 @@ def handle_user_input(user_input: str):
  
         # ── Sources ───────────────────────────────────────────────────
         if result.get("sources"):
-            render_sources(result["sources"], question=user_input)
+            render_sources(
+                result["sources"],
+                question=user_input,
+                answer=result.get("answer", ""),
+            )
  
         # ── Error / Fallback ──────────────────────────────────────────
         if result.get("error") and not result.get("used_fallback", False):
@@ -1714,13 +2090,15 @@ def handle_user_input(user_input: str):
         elif result.get("used_fallback", False):
             st.info("Đang dùng chế độ dự phòng do Ollama chưa phản hồi ổn định.")
  
-    # Lưu vào history (kèm self_rag_meta để render lại khi scroll)
+    # Lưu vào history (kèm meta để render lại khi scroll)
     st.session_state.chat_history.append({
         "role": "assistant",
         "content": result["answer"],
         "sources": result.get("sources", []),
         "question_ctx": user_input,
+        "answer_ctx": result.get("answer", ""),   # dùng cho highlight replay
         "self_rag_meta": self_rag_meta,
+        "co_rag_meta": co_rag_meta,
     })
  
     st.rerun()
