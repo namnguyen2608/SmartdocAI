@@ -7,6 +7,7 @@ Phiên bản 2.0 — Thiết kế lại hoàn toàn
 
 import os
 import sys
+import json
 import time
 import logging
 import tempfile
@@ -730,6 +731,87 @@ st.markdown(
 
 
 # ============================================================
+# Persistence Helpers — lưu/tải state ra disk
+# ============================================================
+_PERSIST_DIR  = config.VECTORSTORE_DIR
+_FILES_PATH   = os.path.join(_PERSIST_DIR, "processed_files.json")
+_HISTORY_PATH = os.path.join(_PERSIST_DIR, "chat_history.json")
+
+
+def save_processed_files(files_info: list):
+    """Lưu danh sách file đã xử lý ra disk."""
+    try:
+        with open(_FILES_PATH, "w", encoding="utf-8") as f:
+            json.dump(files_info, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Lỗi khi lưu processed_files: {e}")
+
+
+def load_processed_files() -> list:
+    """Tải danh sách file đã xử lý từ disk."""
+    if not os.path.exists(_FILES_PATH):
+        return []
+    try:
+        with open(_FILES_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Lỗi khi tải processed_files: {e}")
+        return []
+
+
+def save_chat_history(history: list):
+    """Lưu lịch sử chat ra disk (chỉ giữ role/content/sources — bỏ objects không JSON-able)."""
+    try:
+        safe_history = []
+        for msg in history:
+            safe_msg = {
+                "role": msg.get("role", ""),
+                "content": msg.get("content", ""),
+                "sources": msg.get("sources", []),
+                "question_ctx": msg.get("question_ctx", ""),
+                "answer_ctx": msg.get("answer_ctx", ""),
+                "self_rag_meta": msg.get("self_rag_meta"),
+                "co_rag_meta": msg.get("co_rag_meta"),
+            }
+            safe_history.append(safe_msg)
+        with open(_HISTORY_PATH, "w", encoding="utf-8") as f:
+            json.dump(safe_history, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Lỗi khi lưu chat_history: {e}")
+
+
+def load_chat_history() -> list:
+    """Tải lịch sử chat từ disk."""
+    if not os.path.exists(_HISTORY_PATH):
+        return []
+    try:
+        with open(_HISTORY_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Lỗi khi tải chat_history: {e}")
+        return []
+
+
+def clear_persist_data():
+    """Xóa toàn bộ dữ liệu persist (files + history)."""
+    for path in [_FILES_PATH, _HISTORY_PATH]:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            logger.error(f"Lỗi khi xóa {path}: {e}")
+
+
+def clear_history_persist():
+    """Xóa chỉ file lịch sử chat."""
+    try:
+        if os.path.exists(_HISTORY_PATH):
+            os.remove(_HISTORY_PATH)
+    except Exception as e:
+        logger.error(f"Lỗi khi xóa chat_history.json: {e}")
+
+
+# ============================================================
 # Session State Initialization
 # ============================================================
 def init_session_state():
@@ -764,6 +846,8 @@ def init_session_state():
         "co_rag_agent_keyword": True,
         "co_rag_agent_conceptual": True,
         "co_rag_merge_strategy": "voting",
+        # Flag: đã restore từ disk chưa (tránh load nhiều lần)
+        "_state_restored": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1224,6 +1308,7 @@ def confirm_clear_history_dialog():
     with confirm_col1:
         if st.button("Xác nhận xóa", use_container_width=True, key="confirm_clear_history_yes", type="primary"):
             st.session_state.chat_history = []
+            clear_history_persist()
             st.rerun()
     with confirm_col2:
         if st.button("Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
@@ -1249,6 +1334,7 @@ def confirm_clear_vectorstore_dialog():
     with confirm_col1:
         if st.button("Xác nhận xóa", use_container_width=True, key="confirm_clear_vs_yes", type="primary"):
             clear_vector_store()
+            clear_persist_data()
             st.session_state.vector_store = None
             st.session_state.processed_files = []
             st.session_state.total_chunks = 0
@@ -1648,7 +1734,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
 
             progress_bar.progress(0.9, text="Lưu vector store...")
 
-            # Lưu vector store
+            # Lưu vector store (FAISS index)
             save_vector_store(st.session_state.vector_store)
 
             # Cập nhật thông tin
@@ -1657,6 +1743,9 @@ def process_documents(uploaded_files, upload_signature: str = ""):
 
             # Q7: lưu raw docs để xây BM25 retriever (reset khi xóa rồi upload lại)
             st.session_state.raw_documents.extend(all_chunks)
+
+            # Persist metadata file list ra disk để restore khi khởi động lại
+            save_processed_files(st.session_state.processed_files)
 
             progress_bar.progress(1.0, text="Hoàn tất!")
 
@@ -2100,7 +2189,10 @@ def handle_user_input(user_input: str):
         "self_rag_meta": self_rag_meta,
         "co_rag_meta": co_rag_meta,
     })
- 
+
+    # Persist lịch sử ra disk để khôi phục khi restart
+    save_chat_history(st.session_state.chat_history)
+
     st.rerun()
 
 
@@ -2109,12 +2201,34 @@ def handle_user_input(user_input: str):
 # ============================================================
 def main():
     """Entry point chính của ứng dụng."""
-    # Tải vector store từ disk nếu có
-    if st.session_state.vector_store is None:
+    # Khôi phục toàn bộ state từ disk — chỉ chạy một lần mỗi session
+    if not st.session_state.get("_state_restored", False):
+        st.session_state._state_restored = True
+
+        # 1. Tải FAISS vector store
         saved_store = load_vector_store()
         if saved_store is not None:
             st.session_state.vector_store = saved_store
             logger.info("Đã tải vector store từ disk.")
+
+            # 2. Tải danh sách file đã xử lý (chỉ khi có vector store)
+            saved_files = load_processed_files()
+            if saved_files:
+                st.session_state.processed_files = saved_files
+                st.session_state.total_chunks = sum(
+                    f.get("chunks", 0) for f in saved_files
+                )
+                logger.info(
+                    f"Đã khôi phục {len(saved_files)} file, "
+                    f"{st.session_state.total_chunks} chunks từ disk."
+                )
+
+        # 3. Tải lịch sử chat (độc lập với vector store)
+        if not st.session_state.chat_history:
+            saved_history = load_chat_history()
+            if saved_history:
+                st.session_state.chat_history = saved_history
+                logger.info(f"Đã khôi phục {len(saved_history)} tin nhắn từ disk.")
 
     render_sidebar()
     render_main()
