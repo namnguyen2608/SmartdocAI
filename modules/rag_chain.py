@@ -214,6 +214,56 @@ def format_context(documents: list[Document]) -> str:
     return "\n\n---\n\n".join(context_parts)
 
 
+def _compute_rrf_scores(retriever, query: str, k: int = 60) -> list:
+    """
+    Tính RRF (Reciprocal Rank Fusion) scores thật từ các sub-retrievers.
+
+    RRF(d) = Σ_i  w_i * 1 / (k + rank_i(d))
+      - k=60: hằng số làm trơn (tránh rank 1 được boost quá lớn so với rank 2)
+      - w_i: trọng số của retriever i (lấy từ EnsembleRetriever.weights)
+
+    Nếu retriever không phải EnsembleRetriever, fallback sang rank-based đơn giản.
+    """
+    sub_retrievers = getattr(retriever, "retrievers", None)
+    weights = getattr(retriever, "weights", None)
+
+    if not sub_retrievers:
+        # Không phải EnsembleRetriever → fallback rank-based
+        raw_docs = retriever.invoke(query)
+        return [(doc, round(1.0 - i / max(len(raw_docs), 1), 2)) for i, doc in enumerate(raw_docs)]
+
+    if weights is None:
+        weights = [1.0 / len(sub_retrievers)] * len(sub_retrievers)
+
+    # Thu thập ranked list từ từng sub-retriever (FAISS, BM25, ...)
+    all_ranked = []
+    for sub_ret in sub_retrievers:
+        try:
+            docs = sub_ret.invoke(query)
+        except Exception:
+            docs = []
+        all_ranked.append(docs)
+
+    # Tính RRF score — key: 100 ký tự đầu của page_content để dedup
+    doc_rrf: dict = {}  # key -> [doc, rrf_score]
+    for docs, weight in zip(all_ranked, weights):
+        for rank, doc in enumerate(docs, start=1):
+            key = doc.page_content[:100]
+            rrf_contrib = weight / (k + rank)
+            if key not in doc_rrf:
+                doc_rrf[key] = [doc, 0.0]
+            doc_rrf[key][1] += rrf_contrib
+
+    # Normalize RRF về [0,1] theo max lý thuyết:
+    # Max lý thuyết = doc rank 1 ở TẤT CẢ sub-retrievers → Σ wᵢ/(k+1)
+    rrf_theoretical_max = sum(weights) / (k + 1)
+    sorted_pairs = sorted(doc_rrf.values(), key=lambda x: -x[1])
+    return [
+        (doc, round(min(1.0, score / rrf_theoretical_max), 4))
+        for doc, score in sorted_pairs
+    ]
+
+
 def ask_question(
     question: str,
     vector_store=None,
@@ -283,8 +333,7 @@ def ask_question(
 
             # Q7: dùng retriever tùy chỉnh nếu có (Hybrid Search)
             if retriever is not None:
-                raw_docs = retriever.invoke(search_question)
-                doc_score_pairs = [(doc, 0.8) for doc in raw_docs]
+                doc_score_pairs = _compute_rrf_scores(retriever, search_question)
             else:
                 doc_score_pairs = similarity_search_with_scores(vector_store, search_question)
 
@@ -330,6 +379,8 @@ def ask_question(
                     "score": round(float(score), 3),
                 })
             result["sources"] = sources
+            result["search_mode"] = "hybrid" if retriever is not None else "vector"
+            result["active_filter"] = file_filter or []
 
     except Exception as e:
         error_msg = f"Lỗi xử lý: {str(e)}"

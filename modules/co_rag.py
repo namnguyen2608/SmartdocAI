@@ -119,13 +119,16 @@ def keyword_retriever_agent(
         retriever.k = top_k
         docs = retriever.invoke(query)
 
-        # BM25 không có score chuẩn hoá sẵn → gán score giả định giảm dần
+        # BM25 không có score chuẩn hoá sẵn → dùng RRF formula (k=60)
+        # normalized về [0,1]: score(rank) = (1/(k+1)) / (1/(k+rank)) = (k+rank)/(k+1)^-1
+        # → score(rank) = (k+1) / (k+rank), rank 1 = 1.0, rank 5 ≈ 0.938
+        _rrf_k = 60
+        _rrf_max = 1.0 / (_rrf_k + 1)  # score lý thuyết tại rank 1
         results = []
-        n = len(docs)
         for i, doc in enumerate(docs):
-            # Score giả định: 1.0 cho doc rank 1, giảm dần
-            approx_score = max(0.0, 1.0 - (i / max(n, 1)) * 0.5)
-            results.append((doc, round(approx_score, 3)))
+            rrf_score = 1.0 / (_rrf_k + (i + 1))
+            approx_score = round(rrf_score / _rrf_max, 4)  # normalize về [0,1]
+            results.append((doc, approx_score))
 
         logger.info(f"[Co-RAG Agent2/Keyword] Truy xuất {len(results)} docs cho: '{query[:50]}'")
         return results

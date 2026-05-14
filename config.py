@@ -29,8 +29,8 @@ OLLAMA_REPEAT_PENALTY = 1.1
 # ============================================================
 # Cấu hình Embedding Model
 # ============================================================
-EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-EMBEDDING_DEVICE = "cuda"
+EMBEDDING_MODEL = "sentence-transformers/LaBSE"
+EMBEDDING_DEVICE = "cpu"
 EMBEDDING_NORMALIZE = True
 # ============================================================
 # Cấu hình Text Splitter (Chunking)

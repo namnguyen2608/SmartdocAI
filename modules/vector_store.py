@@ -33,7 +33,7 @@ def get_embedding_model() -> HuggingFaceEmbeddings:
         logger.info(f"Đang tải embedding model: {config.EMBEDDING_MODEL}...")
         _embedding_model = HuggingFaceEmbeddings(
             model_name=config.EMBEDDING_MODEL,
-            model_kwargs={"device": "cpu"},
+            model_kwargs={"device": config.EMBEDDING_DEVICE},
             encode_kwargs={"normalize_embeddings": True},
         )
         logger.info("Đã tải embedding model thành công!")

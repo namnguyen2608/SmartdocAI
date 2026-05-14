@@ -33,8 +33,8 @@ from modules.vector_store import (
     create_ensemble_retriever,   # Q7
     get_cached_bm25_retriever,   # Q7
 )
-from modules.rag_chain import ask_question, check_ollama_connection, get_llm
-from modules.reranker import rerank_with_cross_encoder
+from modules.rag_chain import ask_question, check_ollama_connection, get_llm, _compute_rrf_scores
+from modules.reranker import rerank_with_cross_encoder, CROSS_ENCODER_MODEL
 from modules.self_rag import self_rag_pipeline
 from modules.co_rag import co_rag_pipeline
 
@@ -1425,7 +1425,7 @@ def render_reranker_toggle():
     if not has_docs:
         st.caption("Tải tài liệu để kích hoạt Re-ranking")
     elif reranker_on:
-        st.caption("Cross-Encoder: ms-marco-MiniLM-L-6-v2")
+        st.caption(f"Cross-Encoder: {CROSS_ENCODER_MODEL}")
     else:
         st.caption("Dùng Bi-Encoder scores (FAISS)")
 
@@ -2014,7 +2014,8 @@ def render_sources(sources: list, question: str = "", answer: str = ""):
             chunk_idx = s.get('chunk_index', '')
 
             page_str = f"Trang {page} / {total}" if total else f"Trang {page}"
-            score_pct = int(score * 100)
+            # Score đã normalize về [0,1] tại nguồn (RRF/FAISS cosine/Co-RAG merger)
+            score_pct = min(100, int(score * 100))
             file_icon = "PDF" if file_type == "PDF" else "DOCX"
 
             highlighted_content = highlight_text(content, question, answer=answer)
@@ -2115,9 +2116,14 @@ def handle_user_input(user_input: str):
                     st.session_state.reranker_enabled
                     and st.session_state.vector_store is not None
                 ):
-                    doc_score_pairs = st.session_state.vector_store.similarity_search_with_score(
-                        user_input
-                    )
+                    # Nếu hybrid đang bật, dùng kết quả hybrid làm candidate pool
+                    # thay vì gọi lại FAISS thuần (tránh bỏ qua BM25)
+                    if retriever is not None:
+                        doc_score_pairs = _compute_rrf_scores(retriever, user_input)
+                    else:
+                        doc_score_pairs = st.session_state.vector_store.similarity_search_with_score(
+                            user_input
+                        )
                     if doc_score_pairs:
                         reranked = rerank_with_cross_encoder(user_input, doc_score_pairs, top_k=3)
                         reranked_sources = []

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Cache cross-encoder model
 _cross_encoder_model = None
-CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+CROSS_ENCODER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
 
 def get_cross_encoder():
@@ -72,10 +72,13 @@ def rerank_with_cross_encoder(
         cross_scores = cross_encoder.predict(pairs)
 
         # Normalize cross scores về [0, 1] bằng sigmoid
+        # import math
+        # min_s = float(min(cross_scores))
+        # max_s = float(max(cross_scores))
+        # normalized_scores = [round((float(s) - min_s) / (max_s - min_s + 1e-9), 4) for s in cross_scores]
         import math
         def sigmoid(x):
             return 1 / (1 + math.exp(-x))
-
         normalized_scores = [round(sigmoid(float(s)), 4) for s in cross_scores]
 
         # Kết hợp và sort theo cross-encoder score
