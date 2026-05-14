@@ -1383,21 +1383,27 @@ def render_hybrid_toggle():
     Hiển thị trọng số hiện tại và thông báo khi chưa có tài liệu.
     """
     has_docs = bool(st.session_state.raw_documents)
+    advanced_mode_on = st.session_state.self_rag_enabled or st.session_state.co_rag_enabled
+    is_disabled = not has_docs or advanced_mode_on
 
     hybrid_on = st.toggle(
         "Bật Hybrid Search (BM25 + Vector)",
-        value=st.session_state.hybrid_enabled,
-        disabled=not has_docs,
+        value=st.session_state.hybrid_enabled and not advanced_mode_on,
+        disabled=is_disabled,
         key="hybrid_toggle",
         help=(
             "Kết hợp tìm kiếm ngữ nghĩa (FAISS) với tìm kiếm từ khoá (BM25). "
-            "Hiệu quả hơn với câu hỏi chứa tên riêng, mã số, hoặc từ khoá chuyên ngành."
+            "Hiệu quả hơn với câu hỏi chứa tên riêng, mã số, hoặc từ khoá chuyên ngành. "
+            "Không áp dụng khi Self-RAG hoặc Co-RAG đang bật."
         ),
     )
     st.session_state.hybrid_enabled = hybrid_on
 
     if not has_docs:
         st.caption("Tải tài liệu lên để kích hoạt Hybrid Search")
+    elif advanced_mode_on:
+        mode = "Self-RAG" if st.session_state.self_rag_enabled else "Co-RAG"
+        st.caption(f"⚠️ Bị bypass bởi {mode} — tắt {mode} để dùng")
     elif hybrid_on:
         import config as _cfg
         st.caption(
@@ -1411,19 +1417,26 @@ def render_hybrid_toggle():
 def render_reranker_toggle():
     """Q9 — Cross-Encoder Re-ranking."""
     has_docs = st.session_state.vector_store is not None
+    advanced_mode_on = st.session_state.self_rag_enabled or st.session_state.co_rag_enabled
+    is_disabled = not has_docs or advanced_mode_on
+
     reranker_on = st.toggle(
         "Bật Re-ranking (Cross-Encoder)",
-        value=st.session_state.reranker_enabled,
-        disabled=not has_docs,
+        value=st.session_state.reranker_enabled and not advanced_mode_on,
+        disabled=is_disabled,
         key="reranker_toggle",
         help=(
             "Sau khi FAISS/BM25 lấy candidates, Cross-Encoder đánh giá lại "
-            "từng cặp (query, passage) để xếp hạng chính xác hơn."
+            "từng cặp (query, passage) để xếp hạng chính xác hơn. "
+            "Không áp dụng khi Self-RAG hoặc Co-RAG đang bật (có cơ chế lọc riêng)."
         ),
     )
     st.session_state.reranker_enabled = reranker_on
     if not has_docs:
         st.caption("Tải tài liệu để kích hoạt Re-ranking")
+    elif advanced_mode_on:
+        mode = "Self-RAG" if st.session_state.self_rag_enabled else "Co-RAG"
+        st.caption(f"⚠️ Bị bypass bởi {mode} — có cơ chế lọc riêng")
     elif reranker_on:
         st.caption(f"Cross-Encoder: {CROSS_ENCODER_MODEL}")
     else:
@@ -1433,12 +1446,24 @@ def render_reranker_toggle():
 def render_self_rag_toggle():
     """Q10 — Self-RAG."""
     has_docs = st.session_state.vector_store is not None
+
+    def _on_self_rag_change():
+        if st.session_state.self_rag_toggle:
+            st.session_state.co_rag_toggle = False
+            st.session_state.co_rag_enabled = False
+        st.session_state.self_rag_enabled = st.session_state.self_rag_toggle
+
     self_rag_on = st.toggle(
         "Bật Self-RAG (AI tự đánh giá)",
         value=st.session_state.self_rag_enabled,
         disabled=not has_docs,
         key="self_rag_toggle",
-        help="LLM tự viết lại query, lọc docs, sinh câu trả lời rồi tự đánh giá.",
+        on_change=_on_self_rag_change,
+        help=(
+            "LLM tự viết lại query, lọc docs, sinh câu trả lời rồi tự đánh giá. "
+            "Loại trừ với Co-RAG — bật cái này sẽ tắt Co-RAG. "
+            "Hybrid Search và Re-ranking bị bypass khi Self-RAG bật."
+        ),
     )
     st.session_state.self_rag_enabled = self_rag_on
     if self_rag_on and has_docs:
@@ -1454,7 +1479,7 @@ def render_self_rag_toggle():
             "Answer Grading", value=st.session_state.self_rag_answer_grading,
             key="self_rag_ag", help="Tự đánh giá chất lượng câu trả lời",
         )
-        st.caption("Multi-hop reasoning: tự động bật khi cần")
+        st.caption("Hybrid Search và Re-ranking bị bypass khi Self-RAG bật")
     elif not has_docs:
         st.caption("Tải tài liệu để kích hoạt Self-RAG")
     else:
@@ -1514,14 +1539,24 @@ def render_self_rag_metadata(result: dict):
 def render_co_rag_toggle():
     """Co-RAG — toggle bật/tắt cùng cấu hình agents."""
     has_docs = st.session_state.vector_store is not None
+
+    def _on_co_rag_change():
+        if st.session_state.co_rag_toggle:
+            st.session_state.self_rag_toggle = False
+            st.session_state.self_rag_enabled = False
+        st.session_state.co_rag_enabled = st.session_state.co_rag_toggle
+
     co_rag_on = st.toggle(
         "Bật Co-RAG (Multi-Agent)",
         value=st.session_state.co_rag_enabled,
         disabled=not has_docs,
         key="co_rag_toggle",
+        on_change=_on_co_rag_change,
         help=(
-            "Co-RAG chạy 3 agents song song (Semantic, Keyword, Conceptual) và hợp nhất "
-            "kết quả qua voting để tăng chất lượng truy xuất."
+            "Co-RAG chạy 3 agents (Semantic, Keyword, Conceptual) và hợp nhất "
+            "kết quả qua voting để tăng chất lượng truy xuất. "
+            "Loại trừ với Self-RAG — bật cái này sẽ tắt Self-RAG. "
+            "Hybrid Search và Re-ranking bị bypass khi Co-RAG bật."
         ),
     )
     st.session_state.co_rag_enabled = co_rag_on
@@ -1561,7 +1596,7 @@ def render_co_rag_toggle():
             key="co_rag_con",
             help="LLM phân rã câu hỏi → sub-questions → retrieve",
         )
-        st.caption("Consensus Merger tổng hợp kết quả từ các agents")
+        st.caption("Hybrid Search và Re-ranking bị bypass khi Co-RAG bật")
     elif not has_docs:
         st.caption("Tải tài liệu để kích hoạt Co-RAG")
     else:
