@@ -1,8 +1,3 @@
-"""
-SmartDocAI - Vector Store
-Quản lý FAISS vector store: tạo, lưu, tải, tìm kiếm
-"""
-
 import os
 import logging
 import shutil
@@ -21,12 +16,6 @@ _embedding_model = None
 
 
 def get_embedding_model() -> HuggingFaceEmbeddings:
-    """
-    Lấy hoặc khởi tạo embedding model (singleton pattern).
-
-    Returns:
-        HuggingFaceEmbeddings instance
-    """
     global _embedding_model
 
     if _embedding_model is None:
@@ -43,15 +32,6 @@ def get_embedding_model() -> HuggingFaceEmbeddings:
 
 
 def create_vector_store(documents: List[Document]) -> Optional[FAISS]:
-    """
-    Tạo FAISS vector store từ danh sách documents.
-
-    Args:
-        documents: Danh sách Document đã được chunking
-
-    Returns:
-        FAISS vector store instance, hoặc None nếu documents rỗng
-    """
     if not documents:
         logger.warning("Không có documents để tạo vector store.")
         return None
@@ -71,13 +51,6 @@ def create_vector_store(documents: List[Document]) -> Optional[FAISS]:
 
 
 def save_vector_store(vector_store: FAISS, index_name: Optional[str] = None):
-    """
-    Lưu FAISS vector store xuống ổ đĩa.
-
-    Args:
-        vector_store: FAISS vector store instance
-        index_name: Tên index (mặc định lấy từ config)
-    """
     _index_name = index_name or config.FAISS_INDEX_NAME
     save_path = os.path.join(config.VECTORSTORE_DIR, _index_name)
 
@@ -90,15 +63,6 @@ def save_vector_store(vector_store: FAISS, index_name: Optional[str] = None):
 
 
 def load_vector_store(index_name: Optional[str] = None) -> Optional[FAISS]:
-    """
-    Tải FAISS vector store từ ổ đĩa.
-
-    Args:
-        index_name: Tên index (mặc định lấy từ config)
-
-    Returns:
-        FAISS vector store instance, hoặc None nếu chưa có index
-    """
     _index_name = index_name or config.FAISS_INDEX_NAME
     load_path = os.path.join(config.VECTORSTORE_DIR, _index_name)
 
@@ -124,16 +88,6 @@ def load_vector_store(index_name: Optional[str] = None) -> Optional[FAISS]:
 def add_documents_to_store(
     vector_store: FAISS, documents: List[Document]
 ) -> FAISS:
-    """
-    Thêm documents mới vào vector store đã có.
-
-    Args:
-        vector_store: FAISS vector store hiện tại
-        documents: Danh sách Document mới cần thêm
-
-    Returns:
-        FAISS vector store đã cập nhật
-    """
     if not documents:
         return vector_store
 
@@ -152,7 +106,6 @@ def add_documents_to_store(
 def similarity_search(
     vector_store: FAISS, query: str, top_k: Optional[int] = None
 ) -> List[Document]:
-    """Tìm kiếm similarity và trả về danh sách Document."""
     _top_k = top_k or config.RETRIEVAL_TOP_K
     _fetch_k = config.RETRIEVAL_FETCH_K
     _lambda_mult = config.RETRIEVAL_LAMBDA_MULT
@@ -176,24 +129,10 @@ def similarity_search(
 def similarity_search_with_scores(
     vector_store: FAISS, query: str, top_k: Optional[int] = None
 ) -> List[tuple]:
-    """
-    Tìm kiếm similarity và trả về danh sách (Document, relevance_score).
-
-    Score được chuẩn hoá về [0, 1] — số càng cao càng liên quan.
-    Sử dụng similarity_search_with_relevance_scores của FAISS.
-
-    Args:
-        vector_store: FAISS vector store instance
-        query: Câu truy vấn
-        top_k: Số kết quả tối đa
-
-    Returns:
-        Danh sách tuple (Document, float) sắp xếp theo score giảm dần
-    """
+    """Trả về (Document, relevance_score) trong [0,1]."""
     _top_k = top_k or config.RETRIEVAL_TOP_K
 
     try:
-        # similarity_search_with_relevance_scores trả về score đã chuẩn hoá [0,1]
         results = vector_store.similarity_search_with_relevance_scores(
             query,
             k=_top_k,
@@ -211,12 +150,6 @@ def similarity_search_with_scores(
 
 
 def clear_vector_store(index_name: Optional[str] = None) -> bool:
-    """
-    Xóa FAISS index trên ổ đĩa.
-
-    Returns:
-        True nếu đã xóa hoặc không tồn tại, False nếu lỗi.
-    """
     _index_name = index_name or config.FAISS_INDEX_NAME
     load_path = os.path.join(config.VECTORSTORE_DIR, _index_name)
     try:
@@ -228,15 +161,9 @@ def clear_vector_store(index_name: Optional[str] = None) -> bool:
         logger.error(f"Lỗi khi xóa vector store: {str(e)}")
         return False
 
-# ============================================================
-# Q7 — Hybrid Search (BM25 + Ensemble)
-# ============================================================
-
-# Cache BM25 retriever
 _bm25_retriever_cache = None
 
 def create_bm25_retriever(documents: List[Document], top_k: Optional[int] = None):
-    """Tạo BM25Retriever từ danh sách documents."""
     global _bm25_retriever_cache
     try:
         from langchain_community.retrievers import BM25Retriever
@@ -252,12 +179,10 @@ def create_bm25_retriever(documents: List[Document], top_k: Optional[int] = None
 
 
 def get_cached_bm25_retriever():
-    """Lấy BM25 retriever đã cache."""
     return _bm25_retriever_cache
 
 
 def create_ensemble_retriever(vector_store: FAISS, bm25_retriever):
-    """Tạo EnsembleRetriever kết hợp FAISS và BM25."""
     try:
         from langchain_classic.retrievers import EnsembleRetriever
         faiss_retriever = vector_store.as_retriever(

@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-SmartDocAI - Streamlit Application
-Giao diện chatbot hỏi đáp tài liệu PDF với RAG
-Phiên bản 2.0 — Thiết kế lại hoàn toàn
-"""
-
 import os
 import sys
 import json
@@ -29,27 +23,21 @@ from modules.vector_store import (
     load_vector_store,
     add_documents_to_store,
     clear_vector_store,
-    create_bm25_retriever,       # Q7
-    create_ensemble_retriever,   # Q7
-    get_cached_bm25_retriever,   # Q7
+    create_bm25_retriever,
+    create_ensemble_retriever,
+    get_cached_bm25_retriever,
 )
 from modules.rag_chain import ask_question, check_ollama_connection, get_llm, _compute_rrf_scores
 from modules.reranker import rerank_with_cross_encoder, CROSS_ENCODER_MODEL
 from modules.self_rag import self_rag_pipeline
 from modules.co_rag import co_rag_pipeline
 
-# ============================================================
-# Cấu hình logging
-# ============================================================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# Cấu hình trang Streamlit
-# ============================================================
 st.set_page_config(
     page_title="SmartDocAI — Trợ lý Tài liệu Thông minh",
     page_icon="S",
@@ -57,9 +45,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ============================================================
-# Custom CSS — Thiết kế hiện đại
-# ============================================================
 st.markdown(
     """
 <style>
@@ -730,9 +715,6 @@ st.markdown(
 )
 
 
-# ============================================================
-# Persistence Helpers — lưu/tải state ra disk
-# ============================================================
 _PERSIST_DIR  = config.VECTORSTORE_DIR
 _FILES_PATH   = os.path.join(_PERSIST_DIR, "processed_files.json")
 _HISTORY_PATH = os.path.join(_PERSIST_DIR, "chat_history.json")
@@ -811,11 +793,7 @@ def clear_history_persist():
         logger.error(f"Lỗi khi xóa chat_history.json: {e}")
 
 
-# ============================================================
-# Session State Initialization
-# ============================================================
 def init_session_state():
-    """Khởi tạo session state cho Streamlit."""
     defaults = {
         "chat_history": [],
         "vector_store": None,
@@ -825,28 +803,22 @@ def init_session_state():
         "is_processing": False,
         "auto_process_upload": True,
         "last_processed_upload_signature": "",
-        # Q4 — Chunk Parameters
         "chunk_size": config.CHUNK_SIZE,
         "chunk_overlap": config.CHUNK_OVERLAP,
-        # History viewer
         "selected_history_idx": None,
-        # Q7 — Hybrid Search
         "hybrid_enabled": False,
-        "raw_documents": [],        # toàn bộ chunks để xây BM25
-        # Q8 — Metadata Filtering
-        "active_file_filter": [],   # danh sách file đang được lọc
+        "raw_documents": [],
+        "active_file_filter": [],
         "reranker_enabled": False,
         "self_rag_enabled": False,
         "self_rag_query_rewrite": True,
         "self_rag_relevance_filter": True,
         "self_rag_answer_grading": True,
-        # Co-RAG
         "co_rag_enabled": False,
         "co_rag_agent_semantic": True,
         "co_rag_agent_keyword": True,
         "co_rag_agent_conceptual": True,
         "co_rag_merge_strategy": "voting",
-        # Flag: đã restore từ disk chưa (tránh load nhiều lần)
         "_state_restored": False,
     }
     for key, value in defaults.items():
@@ -857,35 +829,19 @@ def init_session_state():
 init_session_state()
 
 
-# ============================================================
-# Question-number keyword scan
-# ============================================================
 def scan_docs_by_question_numbers(query: str, raw_documents: list) -> list:
-    """
-    Quét raw_documents để tìm chunks chứa các từ khoá cấu trúc tài liệu
-    được nhắc đến trong query: câu, chương, mục, tiểu mục, phần, bài, ví dụ...
-
-    Ví dụ:
-      "câu 33 đến 37"       → Câu 33, 34, 35, 36, 37
-      "chương 2 và 3"       → Chương 2, Chương 3
-      "mục 3.1"             → Mục 3.1
-      "tiểu mục 2.4.1"      → Tiểu mục 2.4.1
-      "phần A và phần B"    → Phần A, Phần B
-    """
     import re as _re
 
     if not raw_documents:
         return []
 
-    # Các từ khoá cấu trúc tài liệu phổ biến (tiếng Việt + tiếng Anh)
     STRUCT_KEYWORDS = [
         'câu', 'chương', 'mục', 'tiểu mục', 'phần', 'bài', 'đề', 'ví dụ',
         'chapter', 'section', 'part', 'exercise', 'question',
     ]
 
-    patterns_to_search = []  # list of compiled regex
+    patterns_to_search = []
 
-    # 1. Dải số: "câu 33 đến 37", "mục 1 tới 5"
     range_pat = _re.compile(
         r'(' + '|'.join(STRUCT_KEYWORDS) + r')\s+([\d\.]+)\s*(?:đến|tới|to|-)\s*([\d\.]+)',
         _re.IGNORECASE
@@ -902,13 +858,11 @@ def scan_docs_by_question_numbers(query: str, raw_documents: list) -> list:
         except ValueError:
             pass
 
-    # 2. Số/mã đơn lẻ: "câu 33", "mục 3.1", "chương II", "phần A"
     single_pat = _re.compile(
         r'(' + '|'.join(STRUCT_KEYWORDS) + r')\s+([\dIVXivx\.]+[a-zA-Z]?)',
         _re.IGNORECASE
     )
     for m in single_pat.finditer(query):
-        # Bỏ qua nếu đã được xử lý bởi range_pat
         keyword, val = m.group(1), m.group(2)
         patterns_to_search.append(_re.compile(
             rf'(?:{_re.escape(keyword)}\s+{_re.escape(val)}\b)',
@@ -933,11 +887,7 @@ def scan_docs_by_question_numbers(query: str, raw_documents: list) -> list:
     return matched[:10]
 
 
-# ============================================================
-# Sidebar
-# ============================================================
 def render_sidebar():
-    """Render sidebar với đầy đủ chức năng: brand, status, upload, files, actions."""
     with st.sidebar:
         # ── Brand ──
         st.markdown(
@@ -1730,15 +1680,10 @@ def render_action_buttons():
 # ── End sidebar helpers ───────────────────────────────────────────────────────
 
 
-# ============================================================
-# Document Processing
-# ============================================================
 def process_documents(uploaded_files, upload_signature: str = ""):
-    """Xử lý các file PDF / DOCX đã upload với giao diện mượt mà."""
+    """Xử lý các file PDF / DOCX đã upload."""
     st.session_state.is_processing = True
 
-    # Reset toàn bộ vector store cũ (kể cả dữ liệu từ session trước trên disk)
-    # để đảm bảo chỉ tìm kiếm trong đúng các file đang upload lần này
     clear_vector_store()
     st.session_state.vector_store = None
     st.session_state.raw_documents = []
@@ -1901,13 +1846,7 @@ def process_documents(uploaded_files, upload_signature: str = ""):
     st.rerun()
 
 
-# ============================================================
-# Main Chat Area
-# ============================================================
 def render_main():
-    """Render main chat area — chỉ chứa chat."""
-
-    # Welcome hoặc Chat history
     if not st.session_state.chat_history:
         render_welcome()
     else:
@@ -2336,16 +2275,10 @@ def handle_user_input(user_input: str):
     st.rerun()
 
 
-# ============================================================
-# Main Entry Point
-# ============================================================
 def main():
-    """Entry point chính của ứng dụng."""
-    # Khôi phục toàn bộ state từ disk — chỉ chạy một lần mỗi session
     if not st.session_state.get("_state_restored", False):
         st.session_state._state_restored = True
 
-        # 1. Tải FAISS vector store
         saved_store = load_vector_store()
         if saved_store is not None:
             st.session_state.vector_store = saved_store

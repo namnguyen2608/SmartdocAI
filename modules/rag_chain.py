@@ -1,8 +1,3 @@
-"""
-SmartDocAI - RAG Chain
-Xây dựng luồng RAG: Retrieval → Augmentation → Generation
-"""
-
 import logging
 import os
 import re
@@ -17,10 +12,6 @@ from modules.language_detector import detect_language, get_language_instruction
 import config
 
 logger = logging.getLogger(__name__)
-
-# ============================================================
-# Prompt Templates
-# ============================================================
 
 RAG_PROMPT_TEMPLATE = """Bạn là SmartDocAI, một trợ lý AI thông minh chuyên phân tích và trả lời câu hỏi dựa trên nội dung tài liệu.
 
@@ -70,7 +61,6 @@ Người dùng chưa tải tài liệu lên hệ thống. Hãy thông báo lịc
 
 
 def _clean_source_name(source: str) -> str:
-    """Chuẩn hóa tên file nguồn để hiển thị thân thiện."""
     name = os.path.basename(str(source or "N/A"))
     if re.match(r"^tmp[a-zA-Z0-9_\\-]+\\.pdf$", name):
         return "Tai lieu da tai len (du lieu cu)"
@@ -78,7 +68,6 @@ def _clean_source_name(source: str) -> str:
 
 
 def _build_fallback_answer(relevant_docs: list[Document], language: str) -> str:
-    """Tạo câu trả lời dự phòng từ context khi LLM không khả dụng."""
     if not relevant_docs:
         if language == "vi":
             return (
@@ -114,15 +103,6 @@ def _build_fallback_answer(relevant_docs: list[Document], language: str) -> str:
 
 
 def get_llm() -> ChatOllama:
-    """
-    Khởi tạo kết nối tới Ollama LLM.
-
-    Returns:
-        ChatOllama instance
-
-    Raises:
-        ConnectionError: Khi không thể kết nối tới Ollama
-    """
     try:
         llm = ChatOllama(
             model=config.OLLAMA_MODEL,
@@ -144,12 +124,6 @@ def get_llm() -> ChatOllama:
 
 
 def check_ollama_connection() -> bool:
-    """
-    Kiểm tra kết nối tới Ollama server.
-
-    Returns:
-        True nếu kết nối thành công, False nếu không
-    """
     try:
         import urllib.request
         url = f"{config.OLLAMA_BASE_URL}/api/tags"
@@ -161,10 +135,6 @@ def check_ollama_connection() -> bool:
 
 
 def _reformulate_question(question: str, chat_history: list, llm: ChatOllama) -> str:
-    """
-    Viết lại follow-up question thành câu hỏi độc lập để search vector store chính xác hơn.
-    Nếu không có lịch sử hoặc LLM lỗi, trả về câu hỏi gốc.
-    """
     if not chat_history:
         return question
 
@@ -192,15 +162,6 @@ def _reformulate_question(question: str, chat_history: list, llm: ChatOllama) ->
 
 
 def format_context(documents: list[Document]) -> str:
-    """
-    Định dạng danh sách Document thành chuỗi context cho prompt.
-
-    Args:
-        documents: Danh sách Document từ similarity search
-
-    Returns:
-        Chuỗi context đã format
-    """
     if not documents:
         return "Không tìm thấy thông tin liên quan trong tài liệu."
 
@@ -216,27 +177,16 @@ def format_context(documents: list[Document]) -> str:
 
 
 def _compute_rrf_scores(retriever, query: str, k: int = 60) -> list:
-    """
-    Tính RRF (Reciprocal Rank Fusion) scores thật từ các sub-retrievers.
-
-    RRF(d) = Σ_i  w_i * 1 / (k + rank_i(d))
-      - k=60: hằng số làm trơn (tránh rank 1 được boost quá lớn so với rank 2)
-      - w_i: trọng số của retriever i (lấy từ EnsembleRetriever.weights)
-
-    Nếu retriever không phải EnsembleRetriever, fallback sang rank-based đơn giản.
-    """
     sub_retrievers = getattr(retriever, "retrievers", None)
     weights = getattr(retriever, "weights", None)
 
     if not sub_retrievers:
-        # Không phải EnsembleRetriever → fallback rank-based
         raw_docs = retriever.invoke(query)
         return [(doc, round(1.0 - i / max(len(raw_docs), 1), 2)) for i, doc in enumerate(raw_docs)]
 
     if weights is None:
         weights = [1.0 / len(sub_retrievers)] * len(sub_retrievers)
 
-    # Thu thập ranked list từ từng sub-retriever (FAISS, BM25, ...)
     all_ranked = []
     for sub_ret in sub_retrievers:
         try:
@@ -245,8 +195,7 @@ def _compute_rrf_scores(retriever, query: str, k: int = 60) -> list:
             docs = []
         all_ranked.append(docs)
 
-    # Tính RRF score — key: 100 ký tự đầu của page_content để dedup
-    doc_rrf: dict = {}  # key -> [doc, rrf_score]
+    doc_rrf: dict = {}
     for docs, weight in zip(all_ranked, weights):
         for rank, doc in enumerate(docs, start=1):
             key = doc.page_content[:100]
@@ -255,8 +204,6 @@ def _compute_rrf_scores(retriever, query: str, k: int = 60) -> list:
                 doc_rrf[key] = [doc, 0.0]
             doc_rrf[key][1] += rrf_contrib
 
-    # Normalize RRF về [0,1] theo max lý thuyết:
-    # Max lý thuyết = doc rank 1 ở TẤT CẢ sub-retrievers → Σ wᵢ/(k+1)
     rrf_theoretical_max = sum(weights) / (k + 1)
     sorted_pairs = sorted(doc_rrf.values(), key=lambda x: -x[1])
     return [
@@ -273,10 +220,6 @@ def ask_question(
     file_filter: Optional[list] = None,
     forced_docs: Optional[list] = None,
 ) -> Dict[str, Any]:
-    """
-    Xử lý câu hỏi của người dùng qua pipeline RAG.
-    """
-    # QUAN TRỌNG: Phải khởi tạo biến result ngay từ đầu
     result = {
         "answer": "",
         "sources": [],
@@ -285,7 +228,6 @@ def ask_question(
         "used_fallback": False,
     }
 
-    # Validate đầu vào: câu hỏi không được rỗng hoặc None
     if not question or not str(question).strip():
         result["answer"] = (
             "Vui lòng nhập câu hỏi của bạn trước khi gửi."
@@ -298,17 +240,11 @@ def ask_question(
     question = str(question).strip()
 
     try:
-        # Bước 1: Phát hiện ngôn ngữ
         language = detect_language(question)
         result["language"] = language
-
-        # Bước 2: Khởi tạo LLM
         llm = get_llm()
-
-        # Bước 2.5: Format lịch sử hội thoại (Q6 - Conversational RAG)
         chat_history_section = ""
         if chat_history:
-            # Lấy tối đa 6 turns gần nhất (3 cặp hỏi-đáp) để tránh quá dài
             recent_history = [m for m in chat_history if m.get("role") in ("user", "assistant")][-6:]
             if recent_history:
                 lines = []
@@ -317,9 +253,7 @@ def ask_question(
                     lines.append(f"{role_label}: {msg['content']}")
                 chat_history_section = "### LỊCH SỬ HỘI THOẠI:\n" + "\n".join(lines) + "\n\n"
 
-        # Bước 3: Xử lý dựa trên việc có/không có tài liệu
         if vector_store is None:
-            # Dùng prompt thông báo chưa có tài liệu
             prompt = ChatPromptTemplate.from_template(NO_CONTEXT_PROMPT_TEMPLATE)
             language_instruction = get_language_instruction(language) 
             chain = prompt | llm
@@ -329,17 +263,12 @@ def ask_question(
             })
             result["answer"] = response.content
         else:
-            # Pipeline RAG đầy đủ
-            # Bước 3.1: Viết lại câu hỏi nếu là follow-up (Conversational RAG)
             search_question = _reformulate_question(question, chat_history, llm)
-
-            # Q7: dùng retriever tùy chỉnh nếu có (Hybrid Search)
             if retriever is not None:
                 doc_score_pairs = _compute_rrf_scores(retriever, search_question)
             else:
                 doc_score_pairs = similarity_search_with_scores(vector_store, search_question)
 
-            # Inject forced_docs (từ keyword scan số câu) — prepend, dedup theo content
             if forced_docs:
                 existing_keys = {d.page_content[:120] for d, _ in doc_score_pairs}
                 injected = [
@@ -350,7 +279,6 @@ def ask_question(
                     logger.info(f"Injected {len(injected)} forced docs by question number scan.")
                 doc_score_pairs = injected + list(doc_score_pairs)
 
-            # Q8: lọc theo file nếu có filter
             if file_filter:
                 doc_score_pairs = [
                     (doc, score) for doc, score in doc_score_pairs
@@ -361,9 +289,6 @@ def ask_question(
 
             language_instruction = get_language_instruction(language)
             prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
-
-            # Khi forced_docs tồn tại (query có pattern số câu/chương/mục),
-            # thêm instruction ép LLM đề cập hết tất cả mục đã yêu cầu
             effective_question = question
             if forced_docs:
                 range_match = re.search(
@@ -392,7 +317,6 @@ def ask_question(
 
             result["answer"] = response.content
 
-            # Trích xuất nguồn tham khảo đầy đủ (dùng cho citation UI)
             seen_keys = set()
             sources = []
             for chunk_idx, (doc, score) in enumerate(doc_score_pairs):
@@ -420,13 +344,11 @@ def ask_question(
         result["error"] = error_msg
         logger.error(error_msg)
         
-        # Nếu có vector_store, dùng fallback để trả về các đoạn text thô
         if vector_store is not None:
             doc_score_pairs = similarity_search_with_scores(vector_store, question)
             relevant_docs = [doc for doc, _ in doc_score_pairs]
             result["answer"] = _build_fallback_answer(relevant_docs, result["language"])
             result["used_fallback"] = True
-            # Gắn sources cơ bản cho fallback
             seen_keys = set()
             sources = []
             for chunk_idx, (doc, score) in enumerate(doc_score_pairs):

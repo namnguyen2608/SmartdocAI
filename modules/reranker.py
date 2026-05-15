@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-SmartDocAI - Reranker (Q9)
-Implement Re-ranking với Cross-Encoder sau bước retrieval.
-So sánh với bi-encoder (FAISS) về relevance scoring.
-"""
-
 import logging
 import time
 from typing import List, Tuple, Optional
@@ -38,18 +32,6 @@ def rerank_with_cross_encoder(
     doc_score_pairs: List[Tuple[Document, float]],
     top_k: int = 3,
 ) -> List[Tuple[Document, float, float]]:
-    """
-    Re-rank danh sách documents bằng Cross-Encoder.
-
-    Args:
-        query: Câu truy vấn gốc
-        doc_score_pairs: List (Document, bi_encoder_score) từ FAISS/BM25
-        top_k: Số kết quả trả về sau rerank
-
-    Returns:
-        List of (Document, bi_encoder_score, cross_encoder_score)
-        sắp xếp theo cross_encoder_score giảm dần
-    """
     if not doc_score_pairs:
         return []
 
