@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit & Integration tests cho modules/vector_store.py
 
@@ -16,9 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.documents import Document
-
-
-# ─── get_embedding_model (singleton) ─────────────────────────────────────────
 
 class TestGetEmbeddingModelSingleton:
     """Kiểm thử singleton pattern của get_embedding_model()"""
@@ -41,9 +37,6 @@ class TestGetEmbeddingModelSingleton:
             result = get_embedding_model()
             assert result is not None
 
-
-# ─── create_vector_store ─────────────────────────────────────────────────────
-
 class TestCreateVectorStore:
     """Kiểm thử hàm create_vector_store()"""
 
@@ -60,9 +53,6 @@ class TestCreateVectorStore:
         result = create_vector_store([])
         assert result is None
 
-
-# ─── save / load vector store ────────────────────────────────────────────────
-
 class TestSaveLoadVectorStore:
     """Kiểm thử save_vector_store và load_vector_store"""
 
@@ -77,9 +67,6 @@ class TestSaveLoadVectorStore:
             assert result is None
         finally:
             config.VECTORSTORE_DIR = original_dir
-
-
-# ─── similarity_search ───────────────────────────────────────────────────────
 
 class TestSimilaritySearch:
     """Kiểm thử hàm similarity_search()"""
@@ -111,9 +98,6 @@ class TestSimilaritySearch:
         result = similarity_search(mock_vs, "query")
         assert result == []
 
-
-# ─── similarity_search_with_scores ───────────────────────────────────────────
-
 class TestSimilaritySearchWithScores:
     """Kiểm thử hàm similarity_search_with_scores()"""
 
@@ -136,9 +120,6 @@ class TestSimilaritySearchWithScores:
         mock_vs.similarity_search_with_relevance_scores.side_effect = Exception("err")
         result = similarity_search_with_scores(mock_vs, "query")
         assert result == []
-
-
-# ─── Integration tests (cần embedding model) ─────────────────────────────────
 
 @pytest.mark.integration
 class TestIntegrationVectorStore:
@@ -216,9 +197,6 @@ class TestIntegrationVectorStore:
             assert m1 is m2
         finally:
             vs_module._embedding_model = original
-
-
-# ─── Q8: Metadata Filtering ──────────────────────────────────────────────────
 
 class TestMetadataFiltering:
     """
@@ -312,7 +290,6 @@ class TestMetadataFiltering:
 
         assert len(filtered) == 2
         assert all("fileA.pdf" in doc.metadata["source"] for doc, _ in filtered)
-
 
 @pytest.mark.integration
 class TestIntegrationMetadataFilter:

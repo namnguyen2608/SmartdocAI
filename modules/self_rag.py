@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SmartDocAI - Self-RAG (Q10)
 LLM tự đánh giá câu trả lời, query rewriting, multi-hop reasoning,
@@ -17,7 +16,6 @@ import config
 
 logger = logging.getLogger(__name__)
 
-
 # ============================================================
 # Prompt Templates
 # ============================================================
@@ -34,7 +32,6 @@ Câu hỏi gốc: {question}
 
 3 câu hỏi viết lại:"""
 
-
 RELEVANCE_CHECK_TEMPLATE = """Đánh giá xem đoạn văn bản sau có liên quan đến câu hỏi không.
 
 Câu hỏi: {question}
@@ -42,7 +39,6 @@ Câu hỏi: {question}
 
 Trả lời CHỈ bằng một từ: "CÓ" hoặc "KHÔNG"
 Đánh giá:"""
-
 
 ANSWER_GRADING_TEMPLATE = """Bạn là giám khảo đánh giá chất lượng câu trả lời AI.
 
@@ -60,7 +56,6 @@ Trả về JSON với format sau (chỉ JSON, không giải thích):
 
 Đánh giá:"""
 
-
 MULTIHOP_TEMPLATE = """Bạn là AI phân tích câu hỏi phức tạp cần nhiều bước suy luận.
 
 Câu hỏi: {question}
@@ -75,7 +70,6 @@ Trả về JSON:
 {{"needs_more_info": <true/false>, "sub_questions": ["<câu hỏi phụ 1>", ...], "final_answer": "<câu trả lời>"}}
 
 Phân tích:"""
-
 
 # ============================================================
 # Query Rewriting
@@ -121,7 +115,6 @@ def rewrite_query(question: str, llm: ChatOllama) -> List[str]:
         logger.warning(f"Query rewriting thất bại: {e}")
         return [question]
 
-
 # ============================================================
 # Relevance Grading
 # ============================================================
@@ -151,7 +144,6 @@ def grade_document_relevance(
         logger.warning(f"Relevance check thất bại: {e}")
         return True  # Mặc định giữ lại document
 
-
 def filter_relevant_docs(
     question: str,
     documents: List[Document],
@@ -173,7 +165,6 @@ def filter_relevant_docs(
 
     logger.info(f"Relevance filter: {len(documents)} → {len(relevant)} docs")
     return relevant
-
 
 # ============================================================
 # Answer Grading / Confidence Scoring
@@ -231,7 +222,6 @@ def grade_answer(
 
     return default
 
-
 # ============================================================
 # Multi-hop Reasoning
 # ============================================================
@@ -279,7 +269,6 @@ def multi_hop_reasoning(
         logger.warning(f"Multi-hop reasoning thất bại: {e}")
 
     return default
-
 
 # ============================================================
 # Self-RAG Pipeline (orchestrator)
@@ -336,14 +325,12 @@ def self_rag_pipeline(
         language = detect_language(question)
         result["language"] = language
 
-        # ── Bước 1: Query Rewriting ──────────────────────────────────
         if enable_query_rewrite:
             all_queries = rewrite_query(question, llm)
         else:
             all_queries = [question]
         result["rewritten_queries"] = all_queries
 
-        # ── Bước 2: Retrieve với tất cả variants ────────────────────
         seen_contents = set()
         all_doc_score_pairs = []
 
@@ -358,7 +345,6 @@ def self_rag_pipeline(
         all_docs = [doc for doc, _ in all_doc_score_pairs]
         result["docs_before_filter"] = len(all_docs)
 
-        # ── Bước 3: Relevance Filtering ─────────────────────────────
         if enable_relevance_filter and all_docs:
             filtered_docs = filter_relevant_docs(question, all_docs, llm)
         else:
@@ -366,7 +352,6 @@ def self_rag_pipeline(
 
         result["docs_after_filter"] = len(filtered_docs)
 
-        # ── Bước 4: Multi-hop check ──────────────────────────────────
         context_text = format_context(filtered_docs[:top_k])
         multihop = multi_hop_reasoning(question, context_text, llm)
         result["sub_questions"] = multihop.get("sub_questions", [])
@@ -385,7 +370,6 @@ def self_rag_pipeline(
             # Update context
             context_text = format_context(filtered_docs[:top_k + 2])
 
-        # ── Bước 5: Generate Answer ──────────────────────────────────
         language_instruction = get_language_instruction(language)
         prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
         chain = prompt | llm
@@ -398,7 +382,6 @@ def self_rag_pipeline(
         answer = response.content
         result["answer"] = answer
 
-        # ── Bước 6: Answer Grading ───────────────────────────────────
         if enable_answer_grading:
             grading = grade_answer(question, context_text, answer, llm)
             result["confidence_score"] = grading["score"]
@@ -406,7 +389,6 @@ def self_rag_pipeline(
             result["has_hallucination"] = grading["has_hallucination"]
             result["grading_feedback"] = grading["feedback"]
 
-        # ── Sources ──────────────────────────────────────────────────
         import os as _os
 
         def clean_source(s):

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit & Integration tests cho Q9 — Re-ranking với Cross-Encoder.
 
@@ -31,9 +30,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.documents import Document
 
-
-# ─── Fixtures ────────────────────────────────────────────────────────────────
-
 @pytest.fixture
 def sample_doc_score_pairs():
     """3 cặp (Document, bi_encoder_score) giả lập kết quả từ FAISS."""
@@ -45,9 +41,6 @@ def sample_doc_score_pairs():
         (Document(page_content="Self-RAG grades its own answer confidence.",
                   metadata={"source": "b.pdf", "page": 7}), 0.78),
     ]
-
-
-# ─── get_cross_encoder singleton ─────────────────────────────────────────────
 
 class TestGetCrossEncoder:
     """Kiểm thử lazy loading và singleton của cross-encoder model."""
@@ -77,9 +70,6 @@ class TestGetCrossEncoder:
             m1 = reranker_module.get_cross_encoder()
             m2 = reranker_module.get_cross_encoder()
             assert m1 is m2
-
-
-# ─── rerank_with_cross_encoder ───────────────────────────────────────────────
 
 class TestRerankWithCrossEncoder:
     """
@@ -255,9 +245,6 @@ class TestRerankWithCrossEncoder:
             assert bi_score == expected, \
                 f"Bi-encoder score của '{doc.page_content[:30]}' bị thay đổi"
 
-
-# ─── compare_bi_vs_cross_encoder ─────────────────────────────────────────────
-
 class TestCompareBiVsCrossEncoder:
     """
     Kiểm thử hàm compare_bi_vs_cross_encoder() — dùng cho UI hiển thị
@@ -336,9 +323,6 @@ class TestCompareBiVsCrossEncoder:
         for i, (doc, score) in enumerate(bi_results):
             assert isinstance(doc, Document)
             assert isinstance(score, float)
-
-
-# ─── Integration tests (cần sentence_transformers + model download) ───────────
 
 @pytest.mark.integration
 class TestIntegrationCrossEncoder:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import logging
 import time
 from typing import List, Tuple, Optional
@@ -10,7 +9,6 @@ logger = logging.getLogger(__name__)
 # Cache cross-encoder model
 _cross_encoder_model = None
 CROSS_ENCODER_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
-
 
 def get_cross_encoder():
     """Singleton: tải cross-encoder model một lần duy nhất."""
@@ -25,7 +23,6 @@ def get_cross_encoder():
             logger.error(f"Lỗi tải Cross-Encoder: {e}")
             return None
     return _cross_encoder_model
-
 
 def rerank_with_cross_encoder(
     query: str,
@@ -85,7 +82,6 @@ def rerank_with_cross_encoder(
             (doc, score, score)
             for doc, score in doc_score_pairs[:top_k]
         ]
-
 
 def compare_bi_vs_cross_encoder(
     query: str,

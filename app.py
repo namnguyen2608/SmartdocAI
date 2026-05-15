@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import sys
 import json
@@ -165,8 +164,6 @@ st.markdown(
         width: 8px; height: 8px; border-radius: 50%;
         background: var(--error);
     }
-
-
 
     /* ── Section Headers ── */
     .section-header {
@@ -714,11 +711,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
 _PERSIST_DIR  = config.VECTORSTORE_DIR
 _FILES_PATH   = os.path.join(_PERSIST_DIR, "processed_files.json")
 _HISTORY_PATH = os.path.join(_PERSIST_DIR, "chat_history.json")
-
 
 def save_processed_files(files_info: list):
     """Lưu danh sách file đã xử lý ra disk."""
@@ -727,7 +722,6 @@ def save_processed_files(files_info: list):
             json.dump(files_info, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"Lỗi khi lưu processed_files: {e}")
-
 
 def load_processed_files() -> list:
     """Tải danh sách file đã xử lý từ disk."""
@@ -739,7 +733,6 @@ def load_processed_files() -> list:
     except Exception as e:
         logger.error(f"Lỗi khi tải processed_files: {e}")
         return []
-
 
 def save_chat_history(history: list):
     """Lưu lịch sử chat ra disk (chỉ giữ role/content/sources — bỏ objects không JSON-able)."""
@@ -761,7 +754,6 @@ def save_chat_history(history: list):
     except Exception as e:
         logger.error(f"Lỗi khi lưu chat_history: {e}")
 
-
 def load_chat_history() -> list:
     """Tải lịch sử chat từ disk."""
     if not os.path.exists(_HISTORY_PATH):
@@ -773,7 +765,6 @@ def load_chat_history() -> list:
         logger.error(f"Lỗi khi tải chat_history: {e}")
         return []
 
-
 def clear_persist_data():
     """Xóa toàn bộ dữ liệu persist (files + history)."""
     for path in [_FILES_PATH, _HISTORY_PATH]:
@@ -783,7 +774,6 @@ def clear_persist_data():
         except Exception as e:
             logger.error(f"Lỗi khi xóa {path}: {e}")
 
-
 def clear_history_persist():
     """Xóa chỉ file lịch sử chat."""
     try:
@@ -791,7 +781,6 @@ def clear_history_persist():
             os.remove(_HISTORY_PATH)
     except Exception as e:
         logger.error(f"Lỗi khi xóa chat_history.json: {e}")
-
 
 def init_session_state():
     defaults = {
@@ -825,9 +814,7 @@ def init_session_state():
         if key not in st.session_state:
             st.session_state[key] = value
 
-
 init_session_state()
-
 
 def scan_docs_by_question_numbers(query: str, raw_documents: list) -> list:
     import re as _re
@@ -886,10 +873,8 @@ def scan_docs_by_question_numbers(query: str, raw_documents: list) -> list:
 
     return matched[:10]
 
-
 def render_sidebar():
     with st.sidebar:
-        # ── Brand ──
         st.markdown(
             """
             <div class="sidebar-brand">
@@ -903,10 +888,8 @@ def render_sidebar():
             unsafe_allow_html=True,
         )
 
-        # ── Trạng thái hệ thống ──
         render_system_status()
 
-        # ── KPI ──
         total_files = len(st.session_state.processed_files)
         total_pages = sum(f.get("pages", 0) for f in st.session_state.processed_files)
         total_chunks = st.session_state.total_chunks
@@ -931,40 +914,31 @@ def render_sidebar():
             unsafe_allow_html=True,
         )
 
-        # ── Chunk Parameters ──
         st.markdown('<div class="section-header">Cài đặt Chunking (Q4)</div>', unsafe_allow_html=True)
         render_chunk_settings()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
-        # ── Upload ──
         st.markdown('<div class="section-header">Tải tài liệu lên</div>', unsafe_allow_html=True)
         render_upload_section()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
-        # ── Danh sách file ──
         st.markdown('<div class="section-header">Tài liệu đã xử lý</div>', unsafe_allow_html=True)
         render_file_list()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
-        # ── Actions ──
         st.markdown('<div class="section-header">Thao tác</div>', unsafe_allow_html=True)
         render_action_buttons()
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
-        # ── Lịch sử hội thoại ──
         st.markdown('<div class="section-header">Lịch sử hội thoại</div>', unsafe_allow_html=True)
         render_chat_history_sidebar()
 
-
-# ── Sidebar helpers ──────────────────────────────────────────────────────────
-
 CHUNK_SIZE_OPTIONS   = [500, 1000, 1500, 2000]
 CHUNK_OVERLAP_OPTIONS = [50, 100, 200]
-
 
 def render_chunk_settings():
     """Q4 — Cho phép người dùng tùy chỉnh chunk_size và chunk_overlap."""
@@ -1030,7 +1004,6 @@ def render_chunk_settings():
     if changed and st.session_state.processed_files:
         st.caption("⚠️ Tải lại tài liệu để áp dụng cài đặt mới.")
 
-
 def render_system_status():
     """Kiểm tra và hiển thị trạng thái Ollama."""
     if st.session_state.ollama_status is None:
@@ -1066,7 +1039,6 @@ def render_system_status():
     if st.button("Kiểm tra kết nối", key="recheck_ollama", use_container_width=True):
         st.session_state.ollama_status = check_ollama_connection()
         st.rerun()
-
 
 def render_upload_section():
     """Render phần upload PDF/DOCX trong sidebar."""
@@ -1145,7 +1117,6 @@ def render_upload_section():
         ):
             process_documents(uploaded_files, upload_signature=upload_signature)
 
-
 def render_file_list():
     """Render danh sách file đã xử lý."""
     if not st.session_state.processed_files:
@@ -1177,7 +1148,6 @@ def render_file_list():
             """,
             unsafe_allow_html=True,
         )
-
 
 def render_chat_history_sidebar():
     """Render lịch sử hội thoại trong sidebar — mỗi item là nút bấm được."""
@@ -1231,7 +1201,6 @@ def render_chat_history_sidebar():
         if clicked:
             st.session_state.selected_history_idx = real_idx
             show_history_detail_dialog(qa_pairs, real_idx)
-
 
 @st.dialog(" Lịch sử hội thoại", width="large")
 def show_history_detail_dialog(qa_pairs: list, idx: int):
@@ -1314,7 +1283,6 @@ def show_history_detail_dialog(qa_pairs: list, idx: int):
                 st.session_state.selected_history_idx = idx + 1
                 show_history_detail_dialog(qa_pairs, idx + 1)
 
-
 @st.dialog("Xác nhận xóa lịch sử")
 def confirm_clear_history_dialog():
     """Dialog xác nhận xóa lịch sử chat — hiển thị ở giữa màn hình."""
@@ -1339,7 +1307,6 @@ def confirm_clear_history_dialog():
     with confirm_col2:
         if st.button("Hủy bỏ", use_container_width=True, key="confirm_clear_history_no"):
             st.rerun()
-
 
 @st.dialog("Xác nhận xóa tài liệu")
 def confirm_clear_vectorstore_dialog():
@@ -1372,7 +1339,6 @@ def confirm_clear_vectorstore_dialog():
         if st.button("Hủy bỏ", use_container_width=True, key="confirm_clear_vs_no"):
             st.rerun()
 
-
 def render_metadata_filter():
     """
     Q8 — Metadata Filtering: cho phép người dùng chọn file để giới hạn tìm kiếm.
@@ -1401,7 +1367,6 @@ def render_metadata_filter():
         st.caption(f"Đang lọc: {len(selected)}/{len(file_names)} file")
     else:
         st.caption("Tìm kiếm toàn bộ tài liệu")
-
 
 def render_hybrid_toggle():
     """
@@ -1439,7 +1404,6 @@ def render_hybrid_toggle():
     else:
         st.caption("Đang dùng: Pure Vector Search (FAISS)")
 
-
 def render_reranker_toggle():
     """Q9 — Cross-Encoder Re-ranking."""
     has_docs = st.session_state.vector_store is not None
@@ -1467,7 +1431,6 @@ def render_reranker_toggle():
         st.caption(f"Cross-Encoder: {CROSS_ENCODER_MODEL}")
     else:
         st.caption("Dùng Bi-Encoder scores (FAISS)")
-
 
 def render_self_rag_toggle():
     """Q10 — Self-RAG."""
@@ -1510,7 +1473,6 @@ def render_self_rag_toggle():
         st.caption("Tải tài liệu để kích hoạt Self-RAG")
     else:
         st.caption("Dùng RAG thông thường")
-
 
 def render_self_rag_metadata(result: dict):
     """Hiển thị panel Self-RAG Analysis sau câu trả lời."""
@@ -1560,7 +1522,6 @@ def render_self_rag_metadata(result: dict):
         with st.expander("Multi-hop Sub-questions", expanded=False):
             for sq in sub_questions:
                 st.markdown(f"• {sq}")
-
 
 def render_co_rag_toggle():
     """Co-RAG — toggle bật/tắt cùng cấu hình agents."""
@@ -1628,7 +1589,6 @@ def render_co_rag_toggle():
     else:
         st.caption("Dùng RAG thông thường")
 
-
 def render_co_rag_metadata(result: dict):
     """Hiển thị Co-RAG Analysis panel sau câu trả lời."""
     agent_counts = result.get("co_rag_agent_counts", {})
@@ -1663,7 +1623,6 @@ def render_co_rag_metadata(result: dict):
         unsafe_allow_html=True,
     )
 
-
 def render_action_buttons():
     """Render các nút thao tác — dialog xác nhận hiển thị ở giữa màn hình."""
     action_col1, action_col2 = st.columns(2)
@@ -1675,10 +1634,6 @@ def render_action_buttons():
     with action_col2:
         if st.button("Xóa tài liệu", use_container_width=True, key="clear_vs_btn"):
             confirm_clear_vectorstore_dialog()
-
-
-# ── End sidebar helpers ───────────────────────────────────────────────────────
-
 
 def process_documents(uploaded_files, upload_signature: str = ""):
     """Xử lý các file PDF / DOCX đã upload."""
@@ -1845,7 +1800,6 @@ def process_documents(uploaded_files, upload_signature: str = ""):
         st.session_state.last_processed_upload_signature = upload_signature
     st.rerun()
 
-
 def render_main():
     if not st.session_state.chat_history:
         render_welcome()
@@ -1887,9 +1841,6 @@ def render_main():
         key="chat_input",
     ):
         handle_user_input(prompt)
-
-
-# ── Main area helpers ────────────────────────────────────────────────────────
 
 def render_welcome():
     """Render welcome hero khi chưa có cuộc hội thoại."""
@@ -1955,7 +1906,6 @@ def highlight_text(text: str, query: str, answer: str = "") -> str:
     safe = html.escape(text)
     candidates = []   # list of (phrase, layer)
 
-    # ── Layer 1: n-gram từ answer ──
     if answer:
         answer_clean = re.sub(r'[\*\_\`\#\>\|]', ' ', answer)   # strip markdown
         answer_words = re.split(r'\s+', answer_clean.strip())
@@ -1969,7 +1919,6 @@ def highlight_text(text: str, query: str, answer: str = "") -> str:
                 if re.search(re.escape(phrase), safe, re.IGNORECASE):
                     candidates.append((phrase, 1))  # layer 1
 
-    # ── Layer 2: keyword từ query ──
     query_tokens = [
         t for t in re.split(r'[\s\W]+', query)
         if len(t) >= 3
@@ -2019,13 +1968,11 @@ def highlight_text(text: str, query: str, answer: str = "") -> str:
 
     return result_text
 
-
 def render_sources(sources: list, question: str = "", answer: str = ""):
     """Hiển thị nguồn trích dẫn: badge row nhanh + expander chi tiết."""
     if not sources:
         return
 
-    # ── Badge row ──
     badges_html = ""
     for s in sources:
         file_label = s['file']
@@ -2045,7 +1992,6 @@ def render_sources(sources: list, question: str = "", answer: str = ""):
         unsafe_allow_html=True,
     )
 
-    # ── Expander chi tiết ──
     with st.expander(f"Xem {len(sources)} nguồn trích dẫn", expanded=False):
         # Chú thích màu sắc
         st.markdown(
@@ -2108,9 +2054,6 @@ def render_sources(sources: list, question: str = "", answer: str = ""):
 </div>"""
             st.markdown(card_html, unsafe_allow_html=True)
 
-
-# ── User input handler ────────────────────────────────────────────────────────────
-
 def handle_user_input(user_input: str):
     st.session_state.chat_history.append({"role": "user", "content": user_input})
     # Lưu ngay để không mất nếu user F5 trong lúc chờ
@@ -2122,7 +2065,6 @@ def handle_user_input(user_input: str):
     with st.chat_message("assistant"):
         with st.spinner("Đang phân tích và suy nghĩ..."):
 
-            # ── Q10: Self-RAG Pipeline ────────────────────────────────
             if st.session_state.self_rag_enabled and st.session_state.vector_store is not None:
                 llm = get_llm()
                 result = self_rag_pipeline(
@@ -2138,7 +2080,6 @@ def handle_user_input(user_input: str):
                 self_rag_meta = result  # lưu lại để render
                 co_rag_meta = None
 
-            # ── Co-RAG: Multi-Agent Pipeline ──────────────────────────
             elif st.session_state.co_rag_enabled and st.session_state.vector_store is not None:
                 llm = get_llm()
                 result = co_rag_pipeline(
@@ -2161,7 +2102,6 @@ def handle_user_input(user_input: str):
                 self_rag_meta = None
                 co_rag_meta = None
 
-                # ── Q7: Hybrid Search ─────────────────────────────────
                 retriever = None
                 if st.session_state.hybrid_enabled and st.session_state.vector_store is not None:
                     bm25 = get_cached_bm25_retriever()
@@ -2170,7 +2110,6 @@ def handle_user_input(user_input: str):
                     if bm25 is not None:
                         retriever = create_ensemble_retriever(st.session_state.vector_store, bm25)
 
-                # ── Keyword scan theo số câu hỏi ──────────────────────
                 forced_docs = scan_docs_by_question_numbers(
                     user_input, st.session_state.raw_documents
                 )
@@ -2184,7 +2123,6 @@ def handle_user_input(user_input: str):
                     forced_docs=forced_docs if forced_docs else None,
                 )
 
-                # ── Q9: Cross-Encoder Reranking ───────────────────────
                 if (
                     st.session_state.reranker_enabled
                     and st.session_state.vector_store is not None
@@ -2215,18 +2153,14 @@ def handle_user_input(user_input: str):
                         result["sources"] = reranked_sources
                         result["search_mode"] = result.get("search_mode", "vector") + "+reranked"
 
-        # ── Hiển thị câu trả lời ─────────────────────────────────────
         st.markdown(result["answer"])
  
-        # ── Q10: Self-RAG metadata panel ─────────────────────────────
         if self_rag_meta:
             render_self_rag_metadata(self_rag_meta)
 
-        # ── Co-RAG metadata panel ────────────────────────────────────
         if co_rag_meta:
             render_co_rag_metadata(co_rag_meta)
 
-        # ── Badge chế độ tìm kiếm ────────────────────────────────────
         mode = result.get("search_mode", "vector")
         active_filter = result.get("active_filter", [])
         badge_parts = []
@@ -2244,7 +2178,6 @@ def handle_user_input(user_input: str):
             badge_parts.append(f"Lọc: {', '.join(active_filter)}")
         st.caption(" · ".join(badge_parts))
  
-        # ── Sources ───────────────────────────────────────────────────
         if result.get("sources"):
             render_sources(
                 result["sources"],
@@ -2252,7 +2185,6 @@ def handle_user_input(user_input: str):
                 answer=result.get("answer", ""),
             )
  
-        # ── Error / Fallback ──────────────────────────────────────────
         if result.get("error") and not result.get("used_fallback", False):
             st.error(f"{result['error']}")
         elif result.get("used_fallback", False):
@@ -2273,7 +2205,6 @@ def handle_user_input(user_input: str):
     save_chat_history(st.session_state.chat_history)
 
     st.rerun()
-
 
 def main():
     if not st.session_state.get("_state_restored", False):
@@ -2314,7 +2245,6 @@ def main():
 
     render_sidebar()
     render_main()
-
 
 if __name__ == "__main__":
     main()

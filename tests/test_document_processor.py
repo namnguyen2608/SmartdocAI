@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit & Integration tests cho modules/document_processor.py
 
@@ -17,9 +16,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from langchain_core.documents import Document
 from modules.document_processor import split_documents, process_uploaded_file, SUPPORTED_EXTENSIONS
-
-
-# ─── split_documents ─────────────────────────────────────────────────────────
 
 class TestSplitDocuments:
     """Kiểm thử hàm split_documents()"""
@@ -93,9 +89,6 @@ class TestSplitDocuments:
         all_content = " ".join(c.page_content for c in chunks)
         assert "quick brown fox" in all_content
 
-
-# ─── SUPPORTED_EXTENSIONS ────────────────────────────────────────────────────
-
 class TestSupportedExtensions:
     """Kiểm thử hằng số SUPPORTED_EXTENSIONS"""
 
@@ -107,9 +100,6 @@ class TestSupportedExtensions:
 
     def test_is_set_or_collection(self):
         assert hasattr(SUPPORTED_EXTENSIONS, "__contains__")
-
-
-# ─── process_uploaded_file (error handling) ──────────────────────────────────
 
 class TestProcessUploadedFileErrors:
     """Kiểm thử xử lý lỗi của process_uploaded_file()"""
@@ -129,9 +119,6 @@ class TestProcessUploadedFileErrors:
                 process_uploaded_file(tmp_path)
         finally:
             os.unlink(tmp_path)
-
-
-# ─── Integration tests ───────────────────────────────────────────────────────
 
 @pytest.mark.integration
 class TestIntegrationExtract:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 benchmark_self_rag.py — Đo thời gian end-to-end RAG chuẩn vs RAG + Self-RAG
 Chạy: python benchmark_self_rag.py
@@ -103,7 +102,6 @@ SCENARIOS = [
 
 N_RUNS = 3  # số lần đo mỗi kịch bản (tăng lên 5 nếu muốn chính xác hơn)
 
-
 # ============================================================
 # Hàm đo RAG chuẩn
 # ============================================================
@@ -124,7 +122,6 @@ def measure_standard_rag(question: str, docs: list, llm) -> float:
     response = chain.invoke({"context": context, "question": question})
     elapsed = time.perf_counter() - t0
     return elapsed, response.content
-
 
 # ============================================================
 # Hàm đo RAG + Self-RAG
@@ -178,7 +175,6 @@ def measure_self_rag(question: str, docs: list, llm) -> float:
         "docs_kept": len(relevant_docs),
     }
     return total, breakdown, answer
-
 
 # ============================================================
 # Main
@@ -302,7 +298,6 @@ def main():
     chart_path = _plot_benchmark_chart(results, os.path.dirname(os.path.abspath(__file__)))
     print(f"  Chart đã lưu  : {chart_path}")
 
-
 def _plot_benchmark_chart(results: list, out_dir: str) -> str:
     """Vẽ grouped bar chart (RAG vs Self-RAG) + stacked overhead breakdown."""
     # Đảm bảo font hỗ trợ Unicode/tiếng Việt
@@ -325,7 +320,6 @@ def _plot_benchmark_chart(results: list, out_dir: str) -> str:
         fontsize=13, fontweight="bold",
     )
 
-    # ── Chart 1: Grouped bar RAG vs Self-RAG ──────────────────────
     ax1 = axes[0]
     bars_rag  = ax1.bar(x - bar_w / 2, rag_vals, bar_w,
                         label="RAG chuẩn", color="#4C8BF5", zorder=3)
@@ -359,7 +353,6 @@ def _plot_benchmark_chart(results: list, out_dir: str) -> str:
     ax1.yaxis.grid(True, linestyle="--", alpha=0.5)
     ax1.set_axisbelow(True)
 
-    # ── Chart 2: Stacked bar — breakdown overhead ─────────────────
     ax2 = axes[1]
     b1 = ax2.bar(x, exp_vals, bar_w * 2, label="Query Expansion",
                  color="#A8D5BA", zorder=3)
@@ -391,7 +384,6 @@ def _plot_benchmark_chart(results: list, out_dir: str) -> str:
     plt.savefig(hinh2_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return chart_path
-
 
 if __name__ == "__main__":
     main()

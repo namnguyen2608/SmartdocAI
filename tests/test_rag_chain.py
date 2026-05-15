@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit & Integration tests cho modules/rag_chain.py
 
@@ -16,9 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from langchain_core.documents import Document
 from modules.rag_chain import format_context, check_ollama_connection
-
-
-# ─── format_context ──────────────────────────────────────────────────────────
 
 class TestFormatContext:
     """Kiểm thử hàm format_context()"""
@@ -90,9 +86,6 @@ class TestFormatContext:
         assert isinstance(result, str)
         assert "content without metadata" in result
 
-
-# ─── check_ollama_connection ─────────────────────────────────────────────────
-
 class TestCheckOllamaConnection:
     """Kiểm thử hàm check_ollama_connection()"""
 
@@ -107,9 +100,6 @@ class TestCheckOllamaConnection:
             check_ollama_connection()
         except Exception as e:
             pytest.fail(f"check_ollama_connection() raised {e}")
-
-
-# ─── Integration tests (cần Ollama) ──────────────────────────────────────────
 
 @pytest.mark.integration
 class TestIntegrationOllama:
@@ -176,9 +166,6 @@ class TestIntegrationOllama:
         result = ask_question("Xin chào, bạn có thể giúp tôi không?", vector_store=None)
         assert isinstance(result, dict)
         assert result.get("language") == "vi"
-
-
-# ─── Q5: Citation / Source Tracking ─────────────────────────────────────────
 
 class TestCitationSourceTracking:
     """
@@ -280,9 +267,6 @@ class TestCitationSourceTracking:
         result = format_context(docs)
         assert isinstance(result, str)
         assert "Nội dung A" in result
-
-
-# ─── Q6: Conversational RAG ──────────────────────────────────────────────────
 
 class TestConversationalRAG:
     """

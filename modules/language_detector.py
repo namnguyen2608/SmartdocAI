@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SmartDocAI - Language Detector
 Phát hiện ngôn ngữ của câu truy vấn và tạo prompt theo ngôn ngữ tương ứng.

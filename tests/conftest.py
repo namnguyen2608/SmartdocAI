@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Shared pytest fixtures dùng chung cho toàn bộ test suite SmartdocAI.
 
@@ -16,9 +15,6 @@ import pytest
 from unittest.mock import MagicMock
 from langchain_core.documents import Document
 
-
-# ─── Document fixtures ────────────────────────────────────────────────────────
-
 @pytest.fixture
 def sample_doc():
     """Một Document đơn giản với metadata đầy đủ."""
@@ -26,7 +22,6 @@ def sample_doc():
         page_content="Thuật toán di truyền (Genetic Algorithm) sử dụng mã hóa Label Encoding.",
         metadata={"source": "sample.pdf", "page": 1, "total_pages": 10, "file_type": "pdf"},
     )
-
 
 @pytest.fixture
 def sample_docs():
@@ -46,7 +41,6 @@ def sample_docs():
         ),
     ]
 
-
 @pytest.fixture
 def sample_chunks():
     """5 chunks dùng cho hybrid search và reranker test."""
@@ -65,15 +59,11 @@ def sample_chunks():
         for i, text in enumerate(texts)
     ]
 
-
 @pytest.fixture
 def doc_score_pairs(sample_chunks):
     """Danh sách (Document, float) giả lập kết quả từ FAISS similarity search."""
     scores = [0.92, 0.85, 0.78, 0.71, 0.63]
     return list(zip(sample_chunks, scores))
-
-
-# ─── Mock fixtures ────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def mock_vector_store(sample_docs):
@@ -88,7 +78,6 @@ def mock_vector_store(sample_docs):
     ]
     return vs
 
-
 @pytest.fixture
 def mock_llm():
     """
@@ -100,7 +89,6 @@ def mock_llm():
     mock_response.content = "Đây là câu trả lời giả lập từ mock LLM."
     llm.invoke.return_value = mock_response
     return llm
-
 
 @pytest.fixture
 def sample_chat_history():

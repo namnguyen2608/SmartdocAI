@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit & Integration tests cho Q10 — Self-RAG (LLM self-evaluation).
 
@@ -27,9 +26,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.documents import Document
 
-
-# ─── Fixtures ────────────────────────────────────────────────────────────────
-
 @pytest.fixture
 def mock_llm():
     """Mock ChatOllama — content có thể được set trong từng test."""
@@ -42,7 +38,6 @@ def mock_llm():
     llm_chain.invoke.return_value = response
     return llm, llm_chain, response
 
-
 @pytest.fixture
 def relevant_doc():
     return Document(
@@ -50,14 +45,12 @@ def relevant_doc():
         metadata={"source": "thesis.pdf", "page": 5}
     )
 
-
 @pytest.fixture
 def irrelevant_doc():
     return Document(
         page_content="Thời tiết hôm nay rất đẹp, nắng nhẹ và có mây.",
         metadata={"source": "other.pdf", "page": 1}
     )
-
 
 @pytest.fixture
 def sample_docs_mixed(relevant_doc, irrelevant_doc):
@@ -70,9 +63,6 @@ def sample_docs_mixed(relevant_doc, irrelevant_doc):
         ),
         irrelevant_doc,
     ]
-
-
-# ─── rewrite_query ────────────────────────────────────────────────────────────
 
 class TestRewriteQuery:
     """
@@ -195,9 +185,6 @@ class TestRewriteQuery:
         for item in result[1:]:  # bỏ qua câu gốc
             assert len(item) >= 10
 
-
-# ─── grade_document_relevance ────────────────────────────────────────────────
-
 class TestGradeDocumentRelevance:
     """
     Kiểm thử grade_document_relevance(question, doc, llm) → bool.
@@ -275,9 +262,6 @@ class TestGradeDocumentRelevance:
 
         assert result is True
 
-
-# ─── filter_relevant_docs ─────────────────────────────────────────────────────
-
 class TestFilterRelevantDocs:
     """
     Kiểm thử filter_relevant_docs(question, documents, llm) → List[Document].
@@ -349,9 +333,6 @@ class TestFilterRelevantDocs:
         input_contents = {d.page_content for d in sample_docs_mixed}
         for doc in result:
             assert doc.page_content in input_contents
-
-
-# ─── grade_answer ─────────────────────────────────────────────────────────────
 
 class TestGradeAnswer:
     """
@@ -519,9 +500,6 @@ class TestGradeAnswer:
         assert result["has_hallucination"] is True
         assert result["is_grounded"] is False
         assert result["score"] < 0.5
-
-
-# ─── Integration tests (cần Ollama) ──────────────────────────────────────────
 
 @pytest.mark.integration
 class TestIntegrationSelfRAG:

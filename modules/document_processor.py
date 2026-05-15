@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SmartDocAI - Document Processor
 Xử lý tài liệu PDF và DOCX: đọc, trích xuất văn bản, chia nhỏ (chunking)
@@ -82,7 +81,6 @@ def extract_text_from_pdf(file_path: str, source_name: Optional[str] = None) -> 
 
     return documents
 
-
 def extract_text_from_docx(file_path: str, source_name: Optional[str] = None) -> List[Document]:
     """
     Đọc file DOCX và trích xuất văn bản theo từng đoạn (paragraph).
@@ -112,13 +110,11 @@ def extract_text_from_docx(file_path: str, source_name: Optional[str] = None) ->
         # Thu thập toàn bộ văn bản từ paragraphs (bao gồm bảng)
         all_text_blocks: List[str] = []
 
-        # -- Paragraphs --
         for para in docx_doc.paragraphs:
             text = para.text.strip()
             if text:
                 all_text_blocks.append(text)
 
-        # -- Tables --
         for table in docx_doc.tables:
             for row in table.rows:
                 row_texts = [cell.text.strip() for cell in row.cells if cell.text.strip()]
@@ -197,7 +193,6 @@ def extract_text_from_docx(file_path: str, source_name: Optional[str] = None) ->
 
     return documents
 
-
 def split_documents(
     documents: List[Document],
     chunk_size: Optional[int] = None,
@@ -234,7 +229,6 @@ def split_documents(
     )
 
     return chunks
-
 
 def process_uploaded_file(file_path: str, source_name: Optional[str] = None) -> List[Document]:
     """

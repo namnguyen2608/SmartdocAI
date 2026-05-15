@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit tests cho modules/language_detector.py
 
@@ -12,9 +11,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from modules.language_detector import detect_language, get_language_instruction, get_prompt_template
-
-
-# ─── detect_language ─────────────────────────────────────────────────────────
 
 class TestDetectLanguage:
     """Kiểm thử hàm detect_language()"""
@@ -71,9 +67,6 @@ class TestDetectLanguage:
             result = detect_language(text)
             assert result in ("vi", "en"), f"Unexpected language '{result}' for '{text}'"
 
-
-# ─── get_language_instruction ────────────────────────────────────────────────
-
 class TestGetLanguageInstruction:
     """Kiểm thử hàm get_language_instruction()"""
 
@@ -99,9 +92,6 @@ class TestGetLanguageInstruction:
         """Language không rõ → vẫn trả về string, không crash"""
         result = get_language_instruction("fr")
         assert isinstance(result, str)
-
-
-# ─── get_prompt_template ─────────────────────────────────────────────────────
 
 class TestGetPromptTemplate:
     """Kiểm thử hàm get_prompt_template()"""

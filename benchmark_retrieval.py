@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SmartDocAI — Benchmark: So sánh latency FAISS / BM25 / Hybrid Search
 Chạy: python benchmark_retrieval.py
@@ -11,7 +10,6 @@ import sys
 import os
 import pickle
 
-# ─── Kiểm tra thư viện ────────────────────────────────────────────────────────
 try:
     from langchain_core.documents import Document
     from langchain_community.vectorstores import FAISS
@@ -23,7 +21,6 @@ except ImportError as e:
     print("Hãy kích hoạt virtualenv và chạy lại.")
     sys.exit(1)
 
-# ─── Cấu hình benchmark ────────────────────────────────────────────────────────
 CHUNK_SIZES   = [1000, 3000, 5000, 10000]   # số lượng chunk cần test
 NUM_RUNS      = 5                        # số lần đo mỗi query để lấy trung bình
 HYBRID_TOP_K  = 5                        # khớp config.HYBRID_TOP_K
@@ -43,7 +40,6 @@ QUERIES = [
     "Phương pháp chunking văn bản tối ưu cho tiếng Việt",
 ]
 
-# ─── Tạo dữ liệu synthetic ────────────────────────────────────────────────────
 AI_TERMS = [
     "retrieval augmented generation", "vector embedding", "semantic search",
     "large language model", "transformer architecture", "attention mechanism",
@@ -69,11 +65,9 @@ def generate_synthetic_chunk(idx: int) -> Document:
         metadata={"source": f"doc_{idx % 5}.pdf", "chunk_id": idx}
     )
 
-
 def generate_documents(n: int):
     random.seed(42)
     return [generate_synthetic_chunk(i) for i in range(n)]
-
 
 def get_or_build_faiss(n_chunks: int, embeddings):
     """Load FAISS index + docs từ cache; nếu chưa có thì build và lưu."""
@@ -99,8 +93,6 @@ def get_or_build_faiss(n_chunks: int, embeddings):
 
     return vs, docs
 
-
-# ─── Hàm đo latency ──────────────────────────────────────────────────────────
 def measure_latency_ms(retriever, query: str, runs: int) -> float:
     """Đo thời gian trung bình (ms) của retriever trên một query, chạy `runs` lần."""
     # Warmup: 1 lần chạy không tính để loại bỏ cold-start artifact
@@ -113,17 +105,11 @@ def measure_latency_ms(retriever, query: str, runs: int) -> float:
         times.append((t1 - t0) * 1000)
     return round(sum(times) / len(times), 2)
 
-
-
-
-
 def avg_over_queries(retriever, queries: list, runs: int) -> float:
     """Trung bình latency (ms) qua tất cả các queries."""
     all_ms = [measure_latency_ms(retriever, q, runs) for q in queries]
     return round(sum(all_ms) / len(all_ms), 2)
 
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
     print("  SmartDocAI — Benchmark Retrieval Latency")
@@ -192,7 +178,6 @@ def main():
 
     print(f"\n(Kết quả sau khi average qua {NUM_PASSES} passes)")
 
-    # ─── In bảng kết quả ──────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("  KẾT QUẢ BENCHMARK (đơn vị: ms)")
     print("=" * 60)
@@ -210,7 +195,6 @@ def main():
     for n, f, b, h in results:
         print(f"| **{n}** | {f} | {b} | {h} |")
 
-    # ─── Vẽ biểu đồ matplotlib ────────────────────────────────────────────────
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -263,7 +247,6 @@ def main():
     except ImportError:
         print("\n[INFO] matplotlib chưa được cài — bỏ qua vẽ biểu đồ.")
         print("       Cài bằng: pip install matplotlib")
-
 
 if __name__ == "__main__":
     main()

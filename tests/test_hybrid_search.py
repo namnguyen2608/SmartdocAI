@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Unit & Integration tests cho Q7 — Hybrid Search (BM25 + Vector Ensemble).
 
@@ -23,18 +22,12 @@ import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.documents import Document
 
-
-# ─── Helper ──────────────────────────────────────────────────────────────────
-
 def _make_docs(texts_and_sources):
     """Tạo list Document từ list (text, source, page)."""
     return [
         Document(page_content=t, metadata={"source": s, "page": p})
         for t, s, p in texts_and_sources
     ]
-
-
-# ─── BM25 Retriever ──────────────────────────────────────────────────────────
 
 class TestBM25Retriever:
     """
@@ -116,9 +109,6 @@ class TestBM25Retriever:
         retriever = BM25Retriever.from_documents(sample_chunks, k=2)
         results = retriever.invoke("thuật toán")
         assert len(results) <= 2
-
-
-# ─── EnsembleRetriever ────────────────────────────────────────────────────────
 
 class TestEnsembleRetriever:
     """
@@ -206,9 +196,6 @@ class TestEnsembleRetriever:
         # Ensemble >= BM25 (có thể bằng nếu dedup loại trùng)
         assert len(ensemble_results) >= 0  # Không crash là đủ
 
-
-# ─── Hybrid vs Pure Vector comparison ────────────────────────────────────────
-
 class TestHybridVsPureVector:
     """
     So sánh Hybrid Search vs Pure Vector Search.
@@ -267,9 +254,6 @@ class TestHybridVsPureVector:
             assert isinstance(doc, Document)
             assert isinstance(doc.page_content, str)
             assert len(doc.page_content) > 0
-
-
-# ─── Integration tests (cần embedding model) ─────────────────────────────────
 
 @pytest.mark.integration
 class TestIntegrationHybridSearch:

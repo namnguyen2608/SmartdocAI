@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 insert_diagrams.py
 Render 2 diagram Mermaid (Self-RAG + Pipeline) ra PNG qua mermaid.ink,
@@ -20,9 +19,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.shared import Cm, Pt, RGBColor
 
-# ─────────────────────────────────────────────
 # Mermaid source — Self-RAG (TD, compact)
-# ─────────────────────────────────────────────
 SELF_RAG_MERMAID = """%%{init: {'theme': 'base', 'themeVariables': {
   'primaryColor': '#EFF6FF',
   'primaryBorderColor': '#3B82F6',
@@ -76,9 +73,7 @@ flowchart TD
     style H fill:#EDE9FE,stroke:#8B5CF6
 """
 
-# ─────────────────────────────────────────────
 # Mermaid source — Pipeline tổng thể (TD, compact)
-# ─────────────────────────────────────────────
 PIPELINE_MERMAID = """%%{init: {'theme': 'base', 'themeVariables': {
   'primaryColor': '#EFF6FF',
   'primaryBorderColor': '#3B82F6',
@@ -163,7 +158,6 @@ flowchart TD
     style CT fill:#EDE9FE,stroke:#8B5CF6
 """
 
-
 def render_mermaid_png(mermaid_code: str, render_width: int = 1400) -> bytes:
     """Render Mermaid code → PNG bytes qua mermaid.ink API."""
     encoded = base64.urlsafe_b64encode(mermaid_code.encode("utf-8")).decode()
@@ -173,7 +167,6 @@ def render_mermaid_png(mermaid_code: str, render_width: int = 1400) -> bytes:
     response.raise_for_status()
     return response.content
 
-
 def set_para_spacing(para, before_pt: int = 0, after_pt: int = 6):
     """Thiết lập khoảng cách trước/sau đoạn."""
     pPr = para._p.get_or_add_pPr()
@@ -182,7 +175,6 @@ def set_para_spacing(para, before_pt: int = 0, after_pt: int = 6):
     spacing.set(qn("w:after"), str(after_pt * 20))
     pPr.append(spacing)
 
-
 def insert_diagram(
     doc: Document,
     png_bytes: bytes,
@@ -190,14 +182,12 @@ def insert_diagram(
     width_cm: float = 14.0,
 ):
     """Chèn ảnh diagram + caption vào doc, canh giữa."""
-    # ── Ảnh ──────────────────────────────────────
     img_para = doc.add_paragraph()
     img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     set_para_spacing(img_para, before_pt=6, after_pt=4)
     run = img_para.add_run()
     run.add_picture(BytesIO(png_bytes), width=Cm(width_cm))
 
-    # ── Caption ───────────────────────────────────
     cap_para = doc.add_paragraph()
     cap_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     set_para_spacing(cap_para, before_pt=2, after_pt=12)
@@ -206,11 +196,9 @@ def insert_diagram(
     cap_run.font.size = Pt(10)
     cap_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
 
-
 def main():
     out_path = Path("diagrams_output.docx")
 
-    # ── Tạo document ──────────────────────────────
     doc = Document()
 
     # Lề A4 chuẩn: 2.5cm mỗi bên → usable width = 16cm
@@ -222,11 +210,9 @@ def main():
     section.top_margin = Cm(2.5)
     section.bottom_margin = Cm(2.5)
 
-    # ── Tiêu đề ───────────────────────────────────
     title = doc.add_heading("Hình minh họa kiến trúc SmartDoc AI", level=1)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # ── Diagram 1: Self-RAG ───────────────────────
     print("[1/2] Render Self-RAG pipeline...")
     doc.add_heading("Hình 1. Self-RAG Pipeline (6 bước)", level=2)
     try:
@@ -243,7 +229,6 @@ def main():
 
     doc.add_page_break()
 
-    # ── Diagram 2: Pipeline tổng thể ─────────────
     print("[2/2] Render Pipeline tổng thể...")
     doc.add_heading("Hình 2. Pipeline tổng thể SmartDoc AI", level=2)
     try:
@@ -258,11 +243,9 @@ def main():
         doc.add_paragraph(f"[Lỗi render Pipeline: {e}]")
         print(f"  ✗ Lỗi: {e}")
 
-    # ── Lưu file ──────────────────────────────────
     doc.save(out_path)
     print(f"\n✓ Đã lưu: {out_path.resolve()}")
     print("  Mở file bằng Microsoft Word để kiểm tra.")
-
 
 if __name__ == "__main__":
     main()
