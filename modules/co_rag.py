@@ -209,8 +209,10 @@ def conceptual_decomposer_agent(
 
 
 # ============================================================
-# Consensus Merger
+# Consensus Merger  (Reciprocal Rank Fusion — RRF)
 # ============================================================
+
+RRF_K = 60  # Hằng số smoothing chuẩn của thuật toán RRF
 
 def consensus_merger(
     agent_results: Dict[str, List[Tuple[Document, float]]],
@@ -218,58 +220,86 @@ def consensus_merger(
     min_votes: int = 2,
 ) -> List[Tuple[Document, float, int]]:
     """
-    Hợp nhất kết quả từ nhiều agents thông qua voting/scoring.
+    Hợp nhất kết quả từ nhiều agents bằng Reciprocal Rank Fusion (RRF).
 
-    Mỗi document được nhận diện qua 120 ký tự đầu của content (fingerprint).
-    Score cuối = trung bình score các agents có chứa doc đó, nhân với hệ số vote.
+    Thuật toán RRF chỉ dựa trên THỨ HẠNG (rank) của document trong danh sách
+    trả về của mỗi agent, hoàn toàn bỏ qua giá trị score gốc. Điều này giải
+    quyết vấn đề score không đồng nhất giữa các hệ thống truy xuất khác nhau
+    (FAISS cosine similarity vs BM25 raw score vs multi-query aggregated score).
+
+    Công thức RRF cho mỗi document d:
+        rrf_score(d) = Σ  1 / (k + rank_agent(d))
+                      agent
+
+    Trong đó:
+        - k = 60 (hằng số smoothing, giảm ảnh hưởng quá mức của rank cao)
+        - rank_agent(d) = vị trí của d trong danh sách agent (bắt đầu từ 1)
+        - Tổng cộng dồn qua tất cả agents có chứa document d
+
+    Sau đó áp dụng vote_boost:
+        vote_boost = 1.0 + (vote_count - 1) * 0.15
+        merged_score = rrf_score * vote_boost
 
     Args:
         agent_results: Dict {agent_name: [(Document, score), ...]}
-        strategy: "voting" — chỉ giữ docs có ≥ min_votes agents agree
-                  "union"  — giữ tất cả docs từ mọi agents
+                       score bị bỏ qua, chỉ dùng thứ tự (index) làm rank
+        strategy: "voting"       — chỉ giữ docs có ≥ min_votes agents agree
+                  "union"        — giữ tất cả docs từ mọi agents
                   "intersection" — chỉ giữ docs có trong MỌI agents
         min_votes: Ngưỡng tối thiểu khi strategy="voting"
 
     Returns:
         List of (Document, merged_score, vote_count) sắp xếp theo merged_score giảm dần
     """
-    # Xây dựng bảng: fingerprint → [(agent_name, doc, score)]
-    doc_registry: Dict[str, List[Tuple[str, Document, float]]] = {}
+    # ── Bước 1: Tính RRF score cho từng document dựa trên rank ────────
+    # fingerprint (120 ký tự đầu) → {rrf_score tích luỹ, vote_count, doc đại diện}
+    rrf_scores: Dict[str, float] = {}            # fp → accumulated rrf score
+    vote_counts: Dict[str, int] = {}             # fp → số agents chứa doc
+    representative_docs: Dict[str, Document] = {}  # fp → Document đầu tiên gặp
 
     for agent_name, results in agent_results.items():
-        for doc, score in results:
-            fp = doc.page_content[:120]
-            if fp not in doc_registry:
-                doc_registry[fp] = []
-            doc_registry[fp].append((agent_name, doc, score))
+        for rank_index, (doc, _score) in enumerate(results):
+            # rank bắt đầu từ 1 (index 0 → rank 1)
+            rank = rank_index + 1
+            # Công thức RRF: 1 / (k + rank)
+            rrf_contribution = 1.0 / (RRF_K + rank)
 
+            fp = doc.page_content[:120]
+
+            # Cộng dồn RRF score
+            rrf_scores[fp] = rrf_scores.get(fp, 0.0) + rrf_contribution
+            # Đếm vote
+            vote_counts[fp] = vote_counts.get(fp, 0) + 1
+            # Lưu document đại diện (lấy lần gặp đầu tiên)
+            if fp not in representative_docs:
+                representative_docs[fp] = doc
+
+    # ── Bước 2: Áp dụng vote_boost và strategy filter ────────────────
     num_agents = len(agent_results)
     merged: List[Tuple[Document, float, int]] = []
 
-    for fp, entries in doc_registry.items():
-        vote_count = len(entries)
-        avg_score = sum(s for _, _, s in entries) / vote_count
-        # Boost score theo số lượt vote (normalized)
+    for fp in rrf_scores:
+        vote_count = vote_counts[fp]
+        rrf_score = rrf_scores[fp]
+
+        # Hệ số thưởng cho document được nhiều agent đồng thuận
         vote_boost = 1.0 + (vote_count - 1) * 0.15
-        merged_score = round(min(1.0, avg_score * vote_boost), 3)
+        merged_score = round(rrf_score * vote_boost, 6)
 
-        # Lấy doc từ entry đầu tiên
-        representative_doc = entries[0][1]
-
-        # Áp dụng strategy
+        # Áp dụng strategy filter
         if strategy == "voting" and vote_count < min_votes:
             continue
         elif strategy == "intersection" and vote_count < num_agents:
             continue
         # strategy == "union": giữ tất cả
 
-        merged.append((representative_doc, merged_score, vote_count))
+        merged.append((representative_docs[fp], merged_score, vote_count))
 
-    # Sắp xếp theo score giảm dần
+    # ── Bước 3: Sắp xếp giảm dần theo merged_score ──────────────────
     merged.sort(key=lambda x: x[1], reverse=True)
     logger.info(
-        f"[Co-RAG Merger] Strategy='{strategy}', Total docs: "
-        f"{len(doc_registry)} → Sau filter: {len(merged)}"
+        f"[Co-RAG Merger/RRF] Strategy='{strategy}', "
+        f"Total unique docs: {len(rrf_scores)} → Sau filter: {len(merged)}"
     )
     return merged
 
