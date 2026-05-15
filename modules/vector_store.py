@@ -31,6 +31,7 @@ def get_embedding_model() -> HuggingFaceEmbeddings:
 
     if _embedding_model is None:
         logger.info(f"Đang tải embedding model: {config.EMBEDDING_MODEL}...")
+        logger.info("Nếu đây là lần đầu, quá trình tải có thể mất vài phút (~470 MB).")
         _embedding_model = HuggingFaceEmbeddings(
             model_name=config.EMBEDDING_MODEL,
             model_kwargs={"device": config.EMBEDDING_DEVICE},

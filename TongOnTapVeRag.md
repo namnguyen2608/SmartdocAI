@@ -340,8 +340,21 @@ $$\text{score}(q,d) = \sum_{t \in q} \text{IDF}(t) \times \frac{\text{tf}(t,d) \
 
 $$\text{RRF}(d) = \sum_{i} \frac{w_i}{k + \text{rank}_i(d)}$$
 
-- `k=60`: hằng số làm trơn (tránh rank 1 được boost quá mạnh)
-- `wᵢ`: trọng số của retriever i (FAISS=0.6, BM25=0.4)
+- `wᵢ`: trọng số retriever i (FAISS=0.6, BM25=0.4)
+- `rank_i(d)`: thứ hạng của document d trong retriever i (bắt đầu từ 1)
+- `k=60`: hằng số làm trơn — xem giải thích bên dưới
+
+**Tại sao mẫu số là `k + rank` chứ không phải `rank`?**
+
+Nếu không có `k`, rank 1 được ưu tiên quá lớn so với rank 2:
+
+| rank | không có k | có k=60 |
+|---|---|---|
+| 1 | 1/1 = 1.000 | 1/61 = 0.0164 |
+| 2 | 1/2 = 0.500 | 1/62 = 0.0161 |
+| 3 | 1/3 = 0.333 | 1/63 = 0.0159 |
+
+Với `k=60` → khoảng cách giữa các rank được làm mượt, tránh một retriever "thắng áp đảo" chỉ vì rank 1.
 
 **Ví dụ:**
 
@@ -365,11 +378,13 @@ EnsembleRetriever(
 
 ### C4. Điểm số trong Hybrid RAG có ý nghĩa gì?
 
-**Thay đổi mới:** Score RRF được normalize bằng **max lý thuyết** (không phải max trong batch):
+Score RRF được normalize về [0, 1] bằng **max lý thuyết**:
 
-$$\text{score}_{norm} = \frac{\text{RRF}(d)}{\sum_i w_i / (k+1)} = \frac{\text{RRF}(d)}{(0.6+0.4)/61} = \text{RRF}(d) \times 61$$
+$$\text{Max lý thuyết} = \frac{w_\text{FAISS} + w_\text{BM25}}{k+1} = \frac{0.6 + 0.4}{61} = \frac{1}{61}$$
 
-**Max lý thuyết** = doc rank 1 ở CẢ HAI retrievers: `(0.6+0.4)/61 ≈ 0.01639`
+Đây là điểm của document đứng **rank 1 ở TẤT CẢ** retriever — điểm tốt nhất có thể đạt được.
+
+$$\text{score\_norm} = \frac{\text{RRF}(d)}{\text{Max lý thuyết}} = \text{RRF}(d) \times 61$$
 
 | Score | Nghĩa |
 |---|---|

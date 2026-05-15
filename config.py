@@ -20,11 +20,12 @@ os.makedirs(VECTORSTORE_DIR, exist_ok=True)
 # ============================================================
 # Cấu hình Ollama LLM
 # ============================================================
-OLLAMA_MODEL = "qwen2.5:7b"
+OLLAMA_MODEL = "qwen2.5:3b"
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_TEMPERATURE = 0.7
 OLLAMA_TOP_P = 0.9
 OLLAMA_REPEAT_PENALTY = 1.1
+OLLAMA_NUM_CTX = 4096          # context window: nhỏ hơn = nhanh hơn (mặc định thường 4096)
 
 # ============================================================
 # Cấu hình Embedding Model
@@ -42,8 +43,8 @@ CHUNK_OVERLAP = 200
 # Cấu hình Retrieval
 # ============================================================
 RETRIEVAL_SEARCH_TYPE = "mmr"
-RETRIEVAL_TOP_K = 8
-RETRIEVAL_FETCH_K = 50
+RETRIEVAL_TOP_K = 6
+RETRIEVAL_FETCH_K = 30
 RETRIEVAL_LAMBDA_MULT = 0.7     
 
 # ============================================================
@@ -56,7 +57,7 @@ FAISS_INDEX_NAME = "smartdoc_index"
 # ============================================================
 HYBRID_VECTOR_WEIGHT = 0.6   # trọng số cho FAISS semantic search
 HYBRID_BM25_WEIGHT   = 0.4   # trọng số cho BM25 keyword search
-HYBRID_TOP_K         = 5     # số kết quả lấy từ mỗi retriever trước khi ensemble
+HYBRID_TOP_K         = 3     # số kết quả lấy từ mỗi retriever trước khi ensemble
 
 # ============================================================
 # Q8 — Multi-document Metadata Filtering

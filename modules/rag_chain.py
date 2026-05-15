@@ -128,6 +128,7 @@ def get_llm() -> ChatOllama:
             model=config.OLLAMA_MODEL,
             base_url=config.OLLAMA_BASE_URL,
             temperature=config.OLLAMA_TEMPERATURE,
+            num_ctx=config.OLLAMA_NUM_CTX,
         )
         return llm
     except Exception as e:
@@ -270,6 +271,7 @@ def ask_question(
     chat_history: Optional[list] = None,
     retriever=None,
     file_filter: Optional[list] = None,
+    forced_docs: Optional[list] = None,
 ) -> Dict[str, Any]:
     """
     Xử lý câu hỏi của người dùng qua pipeline RAG.
@@ -337,6 +339,17 @@ def ask_question(
             else:
                 doc_score_pairs = similarity_search_with_scores(vector_store, search_question)
 
+            # Inject forced_docs (từ keyword scan số câu) — prepend, dedup theo content
+            if forced_docs:
+                existing_keys = {d.page_content[:120] for d, _ in doc_score_pairs}
+                injected = [
+                    (doc, 1.0) for doc in forced_docs
+                    if doc.page_content[:120] not in existing_keys
+                ]
+                if injected:
+                    logger.info(f"Injected {len(injected)} forced docs by question number scan.")
+                doc_score_pairs = injected + list(doc_score_pairs)
+
             # Q8: lọc theo file nếu có filter
             if file_filter:
                 doc_score_pairs = [
@@ -349,9 +362,29 @@ def ask_question(
             language_instruction = get_language_instruction(language)
             prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
 
+            # Khi forced_docs tồn tại (query có pattern số câu/chương/mục),
+            # thêm instruction ép LLM đề cập hết tất cả mục đã yêu cầu
+            effective_question = question
+            if forced_docs:
+                range_match = re.search(
+                    r'(câu|chương|mục|tiểu mục|phần|bài|chapter|section|part)'
+                    r'\s+([\d\.]+)\s*(?:đến|tới|to|-)\s*([\d\.]+)',
+                    question, re.IGNORECASE
+                )
+                if range_match:
+                    kw = range_match.group(1)
+                    start_n = range_match.group(2)
+                    end_n = range_match.group(3)
+                    effective_question = (
+                        question +
+                        f"\n[Yêu cầu bắt buộc: Hãy đề cập đến TẤT CẢ {kw} từ {start_n} đến {end_n}. "
+                        f"Không được bỏ sót bất kỳ {kw} nào trong khoảng này.]"
+                    )
+                    logger.info(f"Coverage hint injected for {kw} {start_n}-{end_n}")
+
             chain = prompt | llm
             response = chain.invoke({
-                "question": question,
+                "question": effective_question,
                 "context": context,
                 "language_instruction": language_instruction,
                 "chat_history_section": chat_history_section,

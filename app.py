@@ -858,6 +858,82 @@ init_session_state()
 
 
 # ============================================================
+# Question-number keyword scan
+# ============================================================
+def scan_docs_by_question_numbers(query: str, raw_documents: list) -> list:
+    """
+    Quét raw_documents để tìm chunks chứa các từ khoá cấu trúc tài liệu
+    được nhắc đến trong query: câu, chương, mục, tiểu mục, phần, bài, ví dụ...
+
+    Ví dụ:
+      "câu 33 đến 37"       → Câu 33, 34, 35, 36, 37
+      "chương 2 và 3"       → Chương 2, Chương 3
+      "mục 3.1"             → Mục 3.1
+      "tiểu mục 2.4.1"      → Tiểu mục 2.4.1
+      "phần A và phần B"    → Phần A, Phần B
+    """
+    import re as _re
+
+    if not raw_documents:
+        return []
+
+    # Các từ khoá cấu trúc tài liệu phổ biến (tiếng Việt + tiếng Anh)
+    STRUCT_KEYWORDS = [
+        'câu', 'chương', 'mục', 'tiểu mục', 'phần', 'bài', 'đề', 'ví dụ',
+        'chapter', 'section', 'part', 'exercise', 'question',
+    ]
+
+    patterns_to_search = []  # list of compiled regex
+
+    # 1. Dải số: "câu 33 đến 37", "mục 1 tới 5"
+    range_pat = _re.compile(
+        r'(' + '|'.join(STRUCT_KEYWORDS) + r')\s+([\d\.]+)\s*(?:đến|tới|to|-)\s*([\d\.]+)',
+        _re.IGNORECASE
+    )
+    for m in range_pat.finditer(query):
+        keyword = m.group(1)
+        try:
+            start, end = int(float(m.group(2))), int(float(m.group(3)))
+            for n in range(start, end + 1):
+                patterns_to_search.append(_re.compile(
+                    rf'(?:{_re.escape(keyword)}\s+{n}\b)',
+                    _re.IGNORECASE
+                ))
+        except ValueError:
+            pass
+
+    # 2. Số/mã đơn lẻ: "câu 33", "mục 3.1", "chương II", "phần A"
+    single_pat = _re.compile(
+        r'(' + '|'.join(STRUCT_KEYWORDS) + r')\s+([\dIVXivx\.]+[a-zA-Z]?)',
+        _re.IGNORECASE
+    )
+    for m in single_pat.finditer(query):
+        # Bỏ qua nếu đã được xử lý bởi range_pat
+        keyword, val = m.group(1), m.group(2)
+        patterns_to_search.append(_re.compile(
+            rf'(?:{_re.escape(keyword)}\s+{_re.escape(val)}\b)',
+            _re.IGNORECASE
+        ))
+
+    if not patterns_to_search:
+        return []
+
+    matched = []
+    seen = set()
+    for doc in raw_documents:
+        text = doc.page_content
+        for pat in patterns_to_search:
+            if pat.search(text):
+                key = text[:120]
+                if key not in seen:
+                    seen.add(key)
+                    matched.append(doc)
+                break
+
+    return matched[:10]
+
+
+# ============================================================
 # Sidebar
 # ============================================================
 def render_sidebar():
@@ -1382,7 +1458,7 @@ def render_hybrid_toggle():
     Q7 — Hybrid Search: toggle BM25 + Vector Ensemble.
     Hiển thị trọng số hiện tại và thông báo khi chưa có tài liệu.
     """
-    has_docs = bool(st.session_state.raw_documents)
+    has_docs = bool(st.session_state.raw_documents) or (st.session_state.vector_store is not None)
     advanced_mode_on = st.session_state.self_rag_enabled or st.session_state.co_rag_enabled
     is_disabled = not has_docs or advanced_mode_on
 
@@ -1761,6 +1837,21 @@ def process_documents(uploaded_files, upload_signature: str = ""):
 
         try:
             if st.session_state.vector_store is None:
+                # Kiểm tra xem embedding model đã được cache chưa
+                import os as _os2
+                hf_cache = _os2.path.expanduser("~/.cache/huggingface/hub")
+                model_slug = config.EMBEDDING_MODEL.replace("/", "--")
+                model_cached = _os2.path.isdir(_os2.path.join(hf_cache, f"models--{model_slug}"))
+                if not model_cached:
+                    status_container.markdown(
+                        """
+                        <div class="processing-toast">
+                            ⬇️ Đang tải embedding model lần đầu (~470 MB)...<br>
+                            <small>Xem tiến trình chi tiết trong terminal Streamlit. Chỉ tải 1 lần duy nhất.</small>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 st.session_state.vector_store = create_vector_store(all_chunks)
             else:
                 st.session_state.vector_store = add_documents_to_store(
@@ -2083,13 +2174,15 @@ def render_sources(sources: list, question: str = "", answer: str = ""):
 
 def handle_user_input(user_input: str):
     st.session_state.chat_history.append({"role": "user", "content": user_input})
- 
+    # Lưu ngay để không mất nếu user F5 trong lúc chờ
+    save_chat_history(st.session_state.chat_history)
+
     with st.chat_message("user"):
         st.markdown(user_input)
  
     with st.chat_message("assistant"):
         with st.spinner("Đang phân tích và suy nghĩ..."):
- 
+
             # ── Q10: Self-RAG Pipeline ────────────────────────────────
             if st.session_state.self_rag_enabled and st.session_state.vector_store is not None:
                 llm = get_llm()
@@ -2128,7 +2221,7 @@ def handle_user_input(user_input: str):
             else:
                 self_rag_meta = None
                 co_rag_meta = None
- 
+
                 # ── Q7: Hybrid Search ─────────────────────────────────
                 retriever = None
                 if st.session_state.hybrid_enabled and st.session_state.vector_store is not None:
@@ -2137,15 +2230,21 @@ def handle_user_input(user_input: str):
                         bm25 = create_bm25_retriever(st.session_state.raw_documents)
                     if bm25 is not None:
                         retriever = create_ensemble_retriever(st.session_state.vector_store, bm25)
- 
+
+                # ── Keyword scan theo số câu hỏi ──────────────────────
+                forced_docs = scan_docs_by_question_numbers(
+                    user_input, st.session_state.raw_documents
+                )
+
                 result = ask_question(
                     question=user_input,
                     vector_store=st.session_state.vector_store,
                     chat_history=st.session_state.chat_history,
                     retriever=retriever,
                     file_filter=st.session_state.active_file_filter,
+                    forced_docs=forced_docs if forced_docs else None,
                 )
- 
+
                 # ── Q9: Cross-Encoder Reranking ───────────────────────
                 if (
                     st.session_state.reranker_enabled
@@ -2176,7 +2275,7 @@ def handle_user_input(user_input: str):
                             })
                         result["sources"] = reranked_sources
                         result["search_mode"] = result.get("search_mode", "vector") + "+reranked"
- 
+
         # ── Hiển thị câu trả lời ─────────────────────────────────────
         st.markdown(result["answer"])
  
@@ -2251,6 +2350,15 @@ def main():
         if saved_store is not None:
             st.session_state.vector_store = saved_store
             logger.info("Đã tải vector store từ disk.")
+
+            # Rebuild raw_documents từ FAISS docstore để BM25 và hybrid toggle hoạt động sau reload
+            try:
+                docstore_dict = saved_store.docstore._dict
+                if docstore_dict:
+                    st.session_state.raw_documents = list(docstore_dict.values())
+                    logger.info(f"Đã khôi phục {len(st.session_state.raw_documents)} chunks từ FAISS docstore.")
+            except Exception as e:
+                logger.warning(f"Không thể khôi phục raw_documents từ docstore: {e}")
 
             # 2. Tải danh sách file đã xử lý (chỉ khi có vector store)
             saved_files = load_processed_files()
