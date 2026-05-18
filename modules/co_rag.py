@@ -1,29 +1,4 @@
-"""
-SmartDocAI - Co-RAG (Collaborative RAG)
-Kiến trúc RAG hợp tác: nhiều agent song song truy xuất từ góc độ khác nhau,
-sau đó Consensus Merger bầu chọn ngữ cảnh tốt nhất.
 
-Kiến trúc:
-    Câu hỏi
-       ↓
-    ┌─────────────────────────────────────────────────────────┐
-    │                 Co-RAG Orchestrator                     │
-    ├──────────────┬──────────────┬─────────────────────────┤
-    │  Agent 1:    │  Agent 2:    │  Agent 3:               │
-    │  Semantic    │  Keyword     │  Conceptual             │
-    │  Retriever   │  Retriever   │  Decomposition          │
-    │  (FAISS MMR) │  (BM25)      │  (LLM sub-questions)    │
-    └──────────────┴──────────────┴─────────────────────────┘
-           ↓               ↓               ↓
-    ┌─────────────────────────────────────────────────────────┐
-    │                Consensus Merger                         │
-    │  - Dedup + score voting                                 │
-    │  - Docs được nhiều agent agree → score cao hơn          │
-    │  - Lọc theo CO_RAG_MIN_VOTES nếu dùng "voting"         │
-    └─────────────────────────────────────────────────────────┘
-           ↓
-    Final Context → LLM → Answer
-"""
 
 import logging
 import re
@@ -37,9 +12,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# Prompt cho Conceptual Decomposition Agent
-# ============================================================
+
 
 CO_RAG_DECOMPOSE_TEMPLATE = """Bạn là chuyên gia phân tích câu hỏi phức tạp.
 
@@ -53,26 +26,14 @@ Câu hỏi gốc: {question}
 
 Các câu hỏi con:"""
 
-# ============================================================
-# Agent 1: Semantic Retriever (FAISS MMR)
-# ============================================================
+
 
 def semantic_retriever_agent(
     query: str,
     vector_store,
     top_k: int = 5,
 ) -> List[Tuple[Document, float]]:
-    """
-    Agent 1 — Semantic Retriever dùng FAISS similarity search với relevance scores.
 
-    Args:
-        query: Câu truy vấn
-        vector_store: FAISS vector store instance
-        top_k: Số docs cần lấy
-
-    Returns:
-        List of (Document, score) tuples
-    """
     try:
         results = vector_store.similarity_search_with_relevance_scores(
             query,
@@ -84,26 +45,14 @@ def semantic_retriever_agent(
         logger.warning(f"[Co-RAG Agent1/Semantic] Lỗi: {e}")
         return []
 
-# ============================================================
-# Agent 2: Keyword Retriever (BM25)
-# ============================================================
+
 
 def keyword_retriever_agent(
     query: str,
     raw_documents: List[Document],
     top_k: int = 5,
 ) -> List[Tuple[Document, float]]:
-    """
-    Agent 2 — Keyword Retriever dùng BM25 (exact/partial keyword matching).
 
-    Args:
-        query: Câu truy vấn
-        raw_documents: Toàn bộ documents gốc để xây BM25 index
-        top_k: Số docs cần lấy
-
-    Returns:
-        List of (Document, score) tuples — score BM25 được chuẩn hoá về [0, 1]
-    """
     if not raw_documents:
         logger.warning("[Co-RAG Agent2/Keyword] Không có documents để xây BM25 index.")
         return []
@@ -115,15 +64,12 @@ def keyword_retriever_agent(
         retriever.k = top_k
         docs = retriever.invoke(query)
 
-        # BM25 không có score chuẩn hoá sẵn → dùng RRF formula (k=60)
-        # normalized về [0,1]: score(rank) = (1/(k+1)) / (1/(k+rank)) = (k+rank)/(k+1)^-1
-        # → score(rank) = (k+1) / (k+rank), rank 1 = 1.0, rank 5 ≈ 0.938
         _rrf_k = 60
-        _rrf_max = 1.0 / (_rrf_k + 1)  # score lý thuyết tại rank 1
+        _rrf_max = 1.0 / (_rrf_k + 1)
         results = []
         for i, doc in enumerate(docs):
             rrf_score = 1.0 / (_rrf_k + (i + 1))
-            approx_score = round(rrf_score / _rrf_max, 4)  # normalize về [0,1]
+            approx_score = round(rrf_score / _rrf_max, 4)
             results.append((doc, approx_score))
 
         logger.info(f"[Co-RAG Agent2/Keyword] Truy xuất {len(results)} docs cho: '{query[:50]}'")
@@ -133,9 +79,7 @@ def keyword_retriever_agent(
         logger.warning(f"[Co-RAG Agent2/Keyword] Lỗi: {e}")
         return []
 
-# ============================================================
-# Agent 3: Conceptual Decomposition Agent
-# ============================================================
+
 
 def conceptual_decomposer_agent(
     question: str,
@@ -143,21 +87,9 @@ def conceptual_decomposer_agent(
     llm: ChatOllama,
     top_k: int = 5,
 ) -> List[Tuple[Document, float]]:
-    """
-    Agent 3 — Conceptual Decomposition: LLM phân rã câu hỏi phức tạp thành
-    các câu hỏi con, truy xuất riêng cho từng câu, rồi hợp nhất kết quả.
 
-    Args:
-        question: Câu hỏi gốc
-        vector_store: FAISS vector store instance
-        llm: ChatOllama instance
-        top_k: Số docs mỗi sub-question
 
-    Returns:
-        List of (Document, score) tuples — đã dedup
-    """
-    # Bước 1: LLM phân rã câu hỏi
-    sub_questions = [question]  # fallback: dùng câu gốc
+    sub_questions = [question]
     try:
         prompt = ChatPromptTemplate.from_template(CO_RAG_DECOMPOSE_TEMPLATE)
         chain = prompt | llm
@@ -181,7 +113,7 @@ def conceptual_decomposer_agent(
     except Exception as e:
         logger.warning(f"[Co-RAG Agent3/Conceptual] Phân rã câu hỏi thất bại: {e}. Dùng câu gốc.")
 
-    # Bước 2: Retrieve với mỗi sub-question, dedup
+
     seen_content_keys = set()
     all_results: List[Tuple[Document, float]] = []
 
@@ -202,68 +134,29 @@ def conceptual_decomposer_agent(
     logger.info(f"[Co-RAG Agent3/Conceptual] Tổng {len(all_results)} docs (sau dedup)")
     return all_results
 
-# ============================================================
-# Consensus Merger  (Reciprocal Rank Fusion — RRF)
-# ============================================================
 
-RRF_K = 60  # Hằng số smoothing chuẩn của thuật toán RRF
+
+RRF_K = 60
 
 def consensus_merger(
     agent_results: Dict[str, List[Tuple[Document, float]]],
     strategy: str = "voting",
     min_votes: int = 2,
 ) -> List[Tuple[Document, float, int]]:
-    """
-    Hợp nhất kết quả từ nhiều agents bằng Reciprocal Rank Fusion (RRF).
 
-    Thuật toán RRF chỉ dựa trên THỨ HẠNG (rank) của document trong danh sách
-    trả về của mỗi agent, hoàn toàn bỏ qua giá trị score gốc. Điều này giải
-    quyết vấn đề score không đồng nhất giữa các hệ thống truy xuất khác nhau
-    (FAISS cosine similarity vs BM25 raw score vs multi-query aggregated score).
-
-    Công thức RRF cho mỗi document d:
-        rrf_score(d) = Σ  1 / (k + rank_agent(d))
-                      agent
-
-    Trong đó:
-        - k = 60 (hằng số smoothing, giảm ảnh hưởng quá mức của rank cao)
-        - rank_agent(d) = vị trí của d trong danh sách agent (bắt đầu từ 1)
-        - Tổng cộng dồn qua tất cả agents có chứa document d
-
-    Sau đó áp dụng vote_boost:
-        vote_boost = 1.0 + (vote_count - 1) * 0.15
-        merged_score = rrf_score * vote_boost
-
-    Args:
-        agent_results: Dict {agent_name: [(Document, score), ...]}
-                       score bị bỏ qua, chỉ dùng thứ tự (index) làm rank
-        strategy: "voting"       — chỉ giữ docs có ≥ min_votes agents agree
-                  "union"        — giữ tất cả docs từ mọi agents
-                  "intersection" — chỉ giữ docs có trong MỌI agents
-        min_votes: Ngưỡng tối thiểu khi strategy="voting"
-
-    Returns:
-        List of (Document, merged_score, vote_count) sắp xếp theo merged_score giảm dần
-    """
-    # fingerprint (120 ký tự đầu) → {rrf_score tích luỹ, vote_count, doc đại diện}
-    rrf_scores: Dict[str, float] = {}            # fp → accumulated rrf score
-    vote_counts: Dict[str, int] = {}             # fp → số agents chứa doc
-    representative_docs: Dict[str, Document] = {}  # fp → Document đầu tiên gặp
+    rrf_scores: Dict[str, float] = {}
+    vote_counts: Dict[str, int] = {}
+    representative_docs: Dict[str, Document] = {}
 
     for agent_name, results in agent_results.items():
         for rank_index, (doc, _score) in enumerate(results):
-            # rank bắt đầu từ 1 (index 0 → rank 1)
             rank = rank_index + 1
-            # Công thức RRF: 1 / (k + rank)
             rrf_contribution = 1.0 / (RRF_K + rank)
 
             fp = doc.page_content[:120]
 
-            # Cộng dồn RRF score
             rrf_scores[fp] = rrf_scores.get(fp, 0.0) + rrf_contribution
-            # Đếm vote
             vote_counts[fp] = vote_counts.get(fp, 0) + 1
-            # Lưu document đại diện (lấy lần gặp đầu tiên)
             if fp not in representative_docs:
                 representative_docs[fp] = doc
 
@@ -274,16 +167,13 @@ def consensus_merger(
         vote_count = vote_counts[fp]
         rrf_score = rrf_scores[fp]
 
-        # Hệ số thưởng cho document được nhiều agent đồng thuận
         vote_boost = 1.0 + (vote_count - 1) * 0.15
         merged_score = round(rrf_score * vote_boost, 6)
 
-        # Áp dụng strategy filter
         if strategy == "voting" and vote_count < min_votes:
             continue
         elif strategy == "intersection" and vote_count < num_agents:
             continue
-        # strategy == "union": giữ tất cả
 
         merged.append((representative_docs[fp], merged_score, vote_count))
 
@@ -294,9 +184,7 @@ def consensus_merger(
     )
     return merged
 
-# ============================================================
-# Co-RAG Pipeline (Orchestrator)
-# ============================================================
+
 
 def co_rag_pipeline(
     question: str,
@@ -310,25 +198,7 @@ def co_rag_pipeline(
     enable_agent_keyword: bool = True,
     enable_agent_conceptual: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Pipeline Co-RAG đầy đủ:
-    1. Chạy song song 3 agents (Semantic, Keyword, Conceptual)
-    2. Consensus Merger bầu chọn docs tốt nhất
-    3. Generate answer với context đã merge
 
-    Args:
-        question: Câu hỏi của người dùng
-        vector_store: FAISS vector store
-        raw_documents: Toàn bộ chunks (cần cho BM25)
-        llm: ChatOllama instance
-        top_k_per_agent: Số docs mỗi agent lấy (mặc định từ config)
-        min_votes: Ngưỡng vote tối thiểu (mặc định từ config)
-        merge_strategy: Chiến lược merge (mặc định từ config)
-        enable_agent_*: Bật/tắt từng agent
-
-    Returns:
-        dict với answer, sources, co_rag metadata
-    """
     from modules.rag_chain import format_context, RAG_PROMPT_TEMPLATE
     from modules.language_detector import detect_language, get_language_instruction
 
@@ -341,12 +211,11 @@ def co_rag_pipeline(
         "sources": [],
         "language": "vi",
         "error": None,
-        # Co-RAG specific metadata
-        "co_rag_agent_counts": {},   # {agent_name: num_docs_retrieved}
+        "co_rag_agent_counts": {},
         "co_rag_total_before_merge": 0,
         "co_rag_total_after_merge": 0,
         "co_rag_merge_strategy": _strategy,
-        "co_rag_sub_questions": [],  # sub-questions từ Conceptual Agent
+        "co_rag_sub_questions": [],
     }
 
     try:
@@ -386,7 +255,6 @@ def co_rag_pipeline(
 
         result["co_rag_total_after_merge"] = len(merged_docs_with_votes)
 
-        # Nếu chiến lược voting lọc sạch, fallback sang union top docs
         if not merged_docs_with_votes:
             logger.warning("[Co-RAG] Voting cho 0 docs, fallback sang union top docs.")
             merged_docs_with_votes = consensus_merger(
@@ -395,7 +263,6 @@ def co_rag_pipeline(
                 min_votes=1,
             )
 
-        # Lấy top docs
         top_merged = merged_docs_with_votes[:config.RETRIEVAL_TOP_K]
 
         docs_for_context = [doc for doc, _, _ in top_merged]
@@ -434,7 +301,7 @@ def co_rag_pipeline(
                 "content": doc.page_content,
                 "chunk_index": idx + 1,
                 "score": merged_score,
-                "vote_count": vote_count,          # Co-RAG specific: số agents đồng ý
+                "vote_count": vote_count,
             })
         result["sources"] = sources
 
